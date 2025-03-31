@@ -106,15 +106,53 @@ int g_lines_count;
 int g_topline;
 int g_screen_line_count;
 
-int g_cursor_line;
+int g_cursor_line, g_cursor_col;
 
 #define LINENUMBERSUPPORT 3
+
+void GrowString(struct Line *l)
+{
+    int new_cap = (l->cap + 1) * 2;
+    char *new = realloc(l->base, new_cap);
+
+    l->base = new;
+    l->cap = new_cap;
+}
+
+void AppendLine()
+{
+    // TODO: make g_lines a dynamic array (have a len and cap)
+    printf("Not implimented: AppendLine()\n");
+    exit(1);
+}
+
+void InsertChar(char c)
+{
+    if (g_cursor_line >= g_lines_count)
+    {
+        AppendLine();
+    }
+
+    struct Line *l = &g_lines[g_cursor_line];
+
+    if (l->len + 1 > l->cap)
+    {
+        printf("Growing\n");
+        GrowString(l);
+    }
+
+    printf("%p len:%d  cap:%d\n", l->base, l->len, l->cap);
+
+    l->base[l->len] = c;
+    l->len += 1;
+}
 
 void FDrawText(const char *text, int x, int y, Color color) { DrawTextEx(g_font, text, (Vector2){x, y}, g_font_size, 1, color); }
 
 void LoadTextFile(const char *filepath)
 {
     g_cursor_line = 0;
+    g_cursor_col = 0;
 
     int linecount = 0;
     char **lines = ReadAllLines(filepath, &linecount);
@@ -140,6 +178,19 @@ void LoadTextFile(const char *filepath)
 
 void OnResize() { g_screen_line_count = GetScreenHeight() / g_font_size; }
 
+void OnCurrsorLineChanged()
+{
+    if (g_topline + 5 > g_cursor_line)
+    {
+        g_topline = g_cursor_line - 5;
+    }
+
+    if ((g_topline + g_screen_line_count) - 5 < g_cursor_line)
+    {
+        g_topline = (g_cursor_line - g_screen_line_count) + 5;
+    }
+}
+
 int main()
 {
     InitWindow(800, 600, "FCON");
@@ -148,7 +199,10 @@ int main()
 
     g_font = LoadFont("romulus.png");
     if (!IsFontValid(g_font))
-        return 1;
+    {
+        TraceLog(LOG_WARNING, "Could not load font, using default.");
+        g_font = GetFontDefault();
+    }
 
     g_font_size = 12;
     g_topline = 0;
@@ -156,11 +210,10 @@ int main()
     g_lines = NULL;
     g_screen_line_count = 0;
     g_cursor_line = 0;
+    g_cursor_col = 0;
 
     // LoadTextFile("test_small.fc");
     LoadTextFile("test.fc");
-
-    Camera2D view = {.zoom = 1};
 
     OnResize();
 
@@ -189,35 +242,55 @@ int main()
                 g_font_size = 12;
                 OnResize();
             }
-        }
 
-        if (IsKeyPressed(KEY_PAGE_UP) || IsKeyPressedRepeat(KEY_PAGE_UP))
-        {
-            g_topline -= g_screen_line_count - 5;
-        }
-
-        if (IsKeyPressed(KEY_PAGE_DOWN) || IsKeyPressedRepeat(KEY_PAGE_DOWN))
-        {
-            g_topline += g_screen_line_count - 5;
-        }
-
-        if (IsKeyDown(KEY_UP))
-        {
-            g_cursor_line -= 1;
-
-            if (g_topline + 5 > g_cursor_line)
+            if (IsKeyPressed(KEY_UP) || IsKeyPressedRepeat(KEY_UP))
             {
-                g_topline = g_cursor_line - 5; 
+                g_topline -= 1;
+            }
+
+            if (IsKeyPressed(KEY_DOWN) || IsKeyPressedRepeat(KEY_DOWN))
+            {
+                g_topline += 1;
             }
         }
-        if (IsKeyDown(KEY_DOWN))
+        else
         {
-            g_cursor_line += 1;
 
-            if ((g_topline + g_screen_line_count) - 5 < g_cursor_line)
+            if (IsKeyPressed(KEY_PAGE_UP) || IsKeyPressedRepeat(KEY_PAGE_UP))
             {
-                g_topline = (g_cursor_line - g_screen_line_count) + 5;
+                g_topline -= g_screen_line_count - 5;
+                g_cursor_line -= g_screen_line_count - 5;
+                OnCurrsorLineChanged();
             }
+
+            if (IsKeyPressed(KEY_PAGE_DOWN) || IsKeyPressedRepeat(KEY_PAGE_DOWN))
+            {
+                g_topline += g_screen_line_count - 5;
+                g_cursor_line += g_screen_line_count - 5;
+                OnCurrsorLineChanged();
+            }
+
+            if (IsKeyPressed(KEY_UP) || IsKeyPressedRepeat(KEY_UP))
+            {
+                g_cursor_line -= 1;
+                OnCurrsorLineChanged();
+            }
+
+            if (IsKeyPressed(KEY_DOWN) || IsKeyPressedRepeat(KEY_DOWN))
+            {
+                g_cursor_line += 1;
+                OnCurrsorLineChanged();
+            }
+
+            int c;
+            do
+            {
+                c = GetCharPressed();
+                if (!c)
+                    break;
+
+                InsertChar(c);
+            } while (c);
         }
 
         if (IsWindowResized())
@@ -226,13 +299,12 @@ int main()
         }
 
         Vector2 scroll = GetMouseWheelMoveV();
-        g_topline -= scroll.y;
+        g_topline -= scroll.y * 2;
 
         if (g_topline + g_screen_line_count > g_lines_count)
         {
             g_topline = g_lines_count - g_screen_line_count;
         }
-
 
         if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT))
         {
@@ -261,17 +333,14 @@ int main()
             g_cursor_line = 0;
 
         if (g_cursor_line >= g_lines_count)
-            g_cursor_line = g_lines_count - 1;
+            g_cursor_line = g_lines_count;
 
-    
         BeginDrawing();
         ClearBackground((Color){0xfd, 0xf6, 0xe3, 0xFF});
 
         for (size_t i = g_topline; i < (g_screen_line_count + g_topline); i++)
         {
             FDrawText(TextFormat("%*d", LINENUMBERSUPPORT, i + 1), 3, (i - g_topline) * g_font_size, BLACK);
-            if (i >= g_lines_count)
-                break;
 
             if (i == g_cursor_line)
             {
@@ -282,7 +351,10 @@ int main()
                               WHITE);
             }
 
-            FDrawText(g_lines[i].base, g_font_size * LINENUMBERSUPPORT - 1, (i - g_topline) * g_font_size, BLACK);
+            if (i >= g_lines_count)
+                break;
+            FDrawText(TextFormat("%.*s", g_lines[i].len, g_lines[i].base),
+                      g_font_size * LINENUMBERSUPPORT - 1, (i - g_topline) * g_font_size, BLACK);
         }
 
         DrawText(TextFormat("TOP IDX: %d\n%u", g_topline, redraw_count),
