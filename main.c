@@ -1,19 +1,25 @@
 #include <raylib.h>
 #include <raymath.h>
 
+#include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-void FreeAllLines(char **lines, int count) {
-  for (int i = 0; i < count; i++) {
+Vector2 MeasureTextEx2(const char *text, size_t text_len);
+
+void FreeAllLines(char **lines, int count)
+{
+  for (int i = 0; i < count; i++)
+  {
     free(lines[i]);
   }
 
   free(lines);
 }
 
-char **ReadAllLines(const char *fname, int *out_linecount) {
+char **ReadAllLines(const char *fname, int *out_linecount)
+{
   FILE *f = fopen(fname, "r");
 
   if (f == NULL)
@@ -28,8 +34,10 @@ char **ReadAllLines(const char *fname, int *out_linecount) {
   char **ret = malloc(sizeof(char *) * arraylen);
   ret[lines_used] = malloc(strlen);
 
-  while (1) {
-    if (feof(f)) {
+  while (1)
+  {
+    if (feof(f))
+    {
       // we are all done reading, finlise the last line
       ret[lines_used] =
           realloc(ret[lines_used], chars_read); // shrink string to be size read
@@ -40,17 +48,20 @@ char **ReadAllLines(const char *fname, int *out_linecount) {
 
     char c = fgetc(f);
 
-    if (ferror(f)) {
+    if (ferror(f))
+    {
       perror("fgetc");
       return NULL;
     }
 
-    if (chars_read > strlen) {
+    if (chars_read > strlen)
+    {
       strlen *= 2;
       ret[lines_used] = realloc(ret[lines_used], strlen);
     }
 
-    if (c == '\n') {
+    if (c == '\n')
+    {
       // store this line
 
       ret[lines_used] = realloc(
@@ -69,7 +80,9 @@ char **ReadAllLines(const char *fname, int *out_linecount) {
       }
       ret[lines_used] = malloc(strlen); // alloc the next string
       continue;
-    } else if (c == '\r' || c == '\n' && 0 >= chars_read) {
+    }
+    else if (c == '\r' || c == '\n' && 0 >= chars_read)
+    {
       // we just got a stray \r or \n
       continue;
     }
@@ -86,9 +99,10 @@ char **ReadAllLines(const char *fname, int *out_linecount) {
 }
 
 Font g_font;
-float g_font_size;
+float g_font_size, g_font_spacing;
 
-struct Line {
+struct Line
+{
   char *base;
   int len, cap;
 } *g_lines;
@@ -99,9 +113,12 @@ int g_screen_line_count;
 
 int g_cursor_line, g_cursor_col;
 
+Camera2D g_x_scroll_view = {.zoom = 1}; // used to scroll left and right
+
 #define LINENUMBERSUPPORT 3
 
-void GrowString(struct Line *l) {
+void GrowString(struct Line *l)
+{
   int new_cap = (l->cap + 1) * 2;
   char *new = realloc(l->base, new_cap);
 
@@ -109,7 +126,8 @@ void GrowString(struct Line *l) {
   l->cap = new_cap;
 }
 
-void AppendLine() {
+void AppendLine()
+{
   g_lines = realloc(g_lines, sizeof(struct Line) * (g_lines_count + 1));
   printf("%d\n", g_lines_count);
   g_lines[g_lines_count].base = 0;
@@ -117,38 +135,68 @@ void AppendLine() {
   g_lines[g_lines_count].len = 0;
   g_lines_count += 1;
 }
-void Backspace() {
+
+void InsertChar(char *str, size_t str_len, char ch, int pos)
+{
+  // Shift characters to the right
+  for (int i = str_len; i >= pos; i--)
+  {
+    str[i + 1] = str[i];
+  }
+
+  // Insert the new character
+  str[pos] = ch;
+}
+
+void RemoveChar(char *str, size_t str_len, int pos)
+{
+  printf("NOT IMPLIMENTED: %s:%d:%s\n", __FILE__, __LINE__, __func__);
+  exit(1);
+}
+
+void Backspace()
+{
   struct Line *l = &g_lines[g_cursor_line];
-  
+
   if (0 >= l->len)
     return; // todo: Delete The line we are on
 
-  l->len -= 1;
+  RemoveChar(l->base, l->cap, g_cursor_col);
+
+  g_cursor_col -= 1;
 }
 
-void InsertChar(char c) {
-  if (g_cursor_line >= g_lines_count) {
+void NewLine() {}
+
+void InsertCharAtCurrsor(char c)
+{
+  if (g_cursor_line >= g_lines_count)
+  {
     AppendLine();
   }
 
   struct Line *l = &g_lines[g_cursor_line];
 
-  if (l->len + 1 > l->cap) {
+  if (l->len + 1 > l->cap)
+  {
     printf("Growing\n");
     GrowString(l);
   }
 
   printf("%p len:%d  cap:%d\n", l->base, l->len, l->cap);
-
-  l->base[l->len] = c;
+  InsertChar(l->base, l->len - 1, c, g_cursor_col);
   l->len += 1;
+
+  g_cursor_col += 1;
 }
 
-void FDrawText(const char *text, int x, int y, Color color) {
+void FDrawText(const char *text, int x, int y, Color color)
+{
   DrawTextEx(g_font, text, (Vector2){x, y}, g_font_size, 1, color);
 }
 
-void LoadTextFile(const char *filepath) {
+void LoadTextFile(const char *filepath)
+{
   g_cursor_line = 0;
   g_cursor_col = 0;
 
@@ -164,7 +212,8 @@ void LoadTextFile(const char *filepath) {
 
   g_lines_count = linecount;
 
-  for (size_t i = 0; i < linecount; i++) {
+  for (size_t i = 0; i < linecount; i++)
+  {
     char *line = lines[i];
     g_lines[i].len = g_lines[i].cap = strlen(line);
     g_lines[i].base = line;
@@ -175,26 +224,32 @@ void LoadTextFile(const char *filepath) {
 
 void OnResize() { g_screen_line_count = GetScreenHeight() / g_font_size; }
 
-void OnCurrsorLineChanged() {
-  if (g_topline + 5 > g_cursor_line) {
+void OnCurrsorLineChanged()
+{
+  if (g_topline + 5 > g_cursor_line)
+  {
     g_topline = g_cursor_line - 5;
   }
 
-  if ((g_topline + g_screen_line_count) - 5 < g_cursor_line) {
+  if ((g_topline + g_screen_line_count) - 5 < g_cursor_line)
+  {
     g_topline = (g_cursor_line - g_screen_line_count) + 5;
   }
 }
 
-int main() {
+int main()
+{
   InitWindow(800, 600, "FCON");
   SetTargetFPS(60);
   EnableEventWaiting();
 
   g_font = LoadFont("romulus.png");
-  if (!IsFontValid(g_font)) {
+  if (!IsFontValid(g_font))
+  {
     TraceLog(LOG_WARNING, "Could not load font, using default.");
     g_font = GetFontDefault();
   }
+  g_font_spacing = 1;
 
   g_font_size = 12;
   g_topline = 0;
@@ -211,90 +266,130 @@ int main() {
 
   unsigned redraw_count = 0;
 
-  while (!WindowShouldClose()) {
+  while (!WindowShouldClose())
+  {
     redraw_count++;
 
-    if (IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL)) {
-      if (IsKeyPressed(KEY_EQUAL)) {
+    if (IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL))
+    {
+      if (IsKeyPressed(KEY_EQUAL))
+      {
         g_font_size += 1.0f;
         OnResize();
       }
 
-      if (IsKeyPressed(KEY_MINUS)) {
+      if (IsKeyPressed(KEY_MINUS))
+      {
         g_font_size -= 1.0f;
         OnResize();
       }
 
-      if (IsKeyPressed(KEY_ZERO)) {
+      if (IsKeyPressed(KEY_ZERO))
+      {
         g_font_size = 12;
         OnResize();
       }
 
-      if (IsKeyPressed(KEY_UP) || IsKeyPressedRepeat(KEY_UP)) {
+      if (IsKeyPressed(KEY_UP) || IsKeyPressedRepeat(KEY_UP))
+      {
         g_topline -= 1;
       }
 
-      if (IsKeyPressed(KEY_DOWN) || IsKeyPressedRepeat(KEY_DOWN)) {
+      if (IsKeyPressed(KEY_DOWN) || IsKeyPressedRepeat(KEY_DOWN))
+      {
         g_topline += 1;
       }
-    } else {
+    }
+    else
+    {
 
-      if (IsKeyPressed(KEY_PAGE_UP) || IsKeyPressedRepeat(KEY_PAGE_UP)) {
+      if (IsKeyPressed(KEY_PAGE_UP) || IsKeyPressedRepeat(KEY_PAGE_UP))
+      {
         g_topline -= g_screen_line_count - 5;
         g_cursor_line -= g_screen_line_count - 5;
         OnCurrsorLineChanged();
       }
 
-      if (IsKeyPressed(KEY_PAGE_DOWN) || IsKeyPressedRepeat(KEY_PAGE_DOWN)) {
+      if (IsKeyPressed(KEY_PAGE_DOWN) || IsKeyPressedRepeat(KEY_PAGE_DOWN))
+      {
         g_topline += g_screen_line_count - 5;
         g_cursor_line += g_screen_line_count - 5;
         OnCurrsorLineChanged();
       }
 
-      if (IsKeyPressed(KEY_UP) || IsKeyPressedRepeat(KEY_UP)) {
+      if (IsKeyPressed(KEY_UP) || IsKeyPressedRepeat(KEY_UP))
+      {
         g_cursor_line -= 1;
         OnCurrsorLineChanged();
       }
 
-      if (IsKeyPressed(KEY_DOWN) || IsKeyPressedRepeat(KEY_DOWN)) {
+      if (IsKeyPressed(KEY_DOWN) || IsKeyPressedRepeat(KEY_DOWN))
+      {
         g_cursor_line += 1;
         OnCurrsorLineChanged();
       }
 
-      if (IsKeyPressed(KEY_BACKSPACE) || IsKeyPressedRepeat(KEY_BACKSPACE)) {
+      if (IsKeyPressed(KEY_LEFT) || IsKeyPressedRepeat(KEY_LEFT))
+      {
+        g_cursor_col -= 1;
+      }
+
+      if (IsKeyPressed(KEY_RIGHT) || IsKeyPressedRepeat(KEY_RIGHT))
+      {
+        g_cursor_col += 1;
+      }
+
+      if (IsKeyPressed(KEY_BACKSPACE) || IsKeyPressedRepeat(KEY_BACKSPACE))
+      {
         Backspace();
       }
 
+      if (IsKeyPressed(KEY_ENTER) || IsKeyPressedRepeat(KEY_ENTER))
+      {
+        NewLine();
+      }
+
       int c;
-      do {
+      do
+      {
         c = GetCharPressed();
         if (!c)
           break;
 
-        InsertChar(c);
+        InsertCharAtCurrsor(c);
+
       } while (c);
     }
 
-    if (IsWindowResized()) {
+    if (IsWindowResized())
+    {
       OnResize();
     }
 
     Vector2 scroll = GetMouseWheelMoveV();
     g_topline -= scroll.y * 2;
 
-    if (g_topline + g_screen_line_count > g_lines_count) {
+    if (g_topline + g_screen_line_count > g_lines_count)
+    {
       g_topline = g_lines_count - g_screen_line_count;
     }
 
-    if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+    g_x_scroll_view.offset.x += scroll.x * 30;
+    if (g_x_scroll_view.offset.x > 0)
+      g_x_scroll_view.offset.x = 0;
+
+    if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT))
+    {
       Vector2 pt = GetMousePosition();
 
-      for (size_t i = g_topline; i < (g_screen_line_count + g_topline); i++) {
+      for (size_t i = g_topline; i < (g_screen_line_count + g_topline); i++)
+      {
         Rectangle r = {g_font_size * LINENUMBERSUPPORT - 1,
                        (i - g_topline) * g_font_size, GetScreenWidth(),
                        g_font_size};
 
-        if (CheckCollisionPointRec(pt, r)) {
+        if (CheckCollisionPointRec(pt, r))
+        {
           g_cursor_line = i;
           break;
         }
@@ -307,20 +402,26 @@ int main() {
     if (0 > g_cursor_line)
       g_cursor_line = 0;
 
+    if (0 > g_cursor_col)
+      g_cursor_col = 0;
+
     if (g_cursor_line >= g_lines_count)
       g_cursor_line = g_lines_count;
 
     BeginDrawing();
     ClearBackground((Color){0xfd, 0xf6, 0xe3, 0xFF});
+    BeginMode2D(g_x_scroll_view);
 
-    for (size_t i = g_topline; i < (g_screen_line_count + g_topline); i++) {
+    for (size_t i = g_topline; i < (g_screen_line_count + g_topline); i++)
+    {
       FDrawText(TextFormat("%*d", LINENUMBERSUPPORT, i + 1), 3,
                 (i - g_topline) * g_font_size, BLACK);
 
-      if (i == g_cursor_line) {
+      if (i == g_cursor_line)
+      {
         DrawRectangle(g_font_size * LINENUMBERSUPPORT - 1,
                       (i - g_topline) * g_font_size, GetScreenWidth(),
-                      g_font_size, WHITE);
+                      g_font_size, (Color){0xee, 0xe8, 0xd5, 0xFF});
       }
 
       if (i >= g_lines_count)
@@ -330,11 +431,86 @@ int main() {
                 (i - g_topline) * g_font_size, BLACK);
     }
 
-    DrawText(TextFormat("TOP IDX: %d\n%u", g_topline, redraw_count), 40,
-             GetScreenHeight() - g_font_size * 2, g_font_size, PURPLE);
+    struct Line *l = &g_lines[g_cursor_line];
 
+    Vector2 linelen = MeasureTextEx2(l->base, g_cursor_col);
+    linelen.x += g_font_size * LINENUMBERSUPPORT - 1;
+
+    float cy = (g_cursor_line - g_topline) * g_font_size;
+
+    DrawLineV((Vector2){linelen.x, cy}, (Vector2){linelen.x, cy + g_font_size},
+              BLACK);
+
+    DrawText(TextFormat("TOP IDX: %d\n%u\n%f\n%f", g_topline, redraw_count, cy,
+                        linelen.x),
+             40, GetScreenHeight() - g_font_size * 4, g_font_size, PURPLE);
+
+    EndMode2D();
     EndDrawing();
   }
 
+  CloseWindow();
+
   return 0;
+}
+
+// Measure string size for Font
+Vector2 MeasureTextEx2(const char *text, size_t text_len)
+{
+  Vector2 textSize = {0};
+
+  if (((g_font.texture.id == 0)) || (text == NULL) || (text[0] == '\0'))
+    return textSize; // Security check
+
+  int tempByteCounter = 0; // Used to count longer text line num chars
+  int byteCounter = 0;
+
+  float textWidth = 0.0f;
+  float tempTextWidth = 0.0f; // Used to count longer text line width
+
+  float textHeight = g_font_size;
+  float scaleFactor = g_font_size / (float)g_font.baseSize;
+
+  int letter = 0; // Current character
+  int index = 0;  // Index position in sprite font
+
+  for (int i = 0; i < text_len;)
+  {
+    byteCounter++;
+
+    int codepointByteCount = 0;
+    letter = GetCodepointNext(&text[i], &codepointByteCount);
+    index = GetGlyphIndex(g_font, letter);
+
+    i += codepointByteCount;
+
+    if (letter != '\n')
+    {
+      if (g_font.glyphs[index].advanceX > 0)
+        textWidth += g_font.glyphs[index].advanceX;
+      else
+        textWidth += (g_font.recs[index].width + g_font.glyphs[index].offsetX);
+    }
+    else
+    {
+      if (tempTextWidth < textWidth)
+        tempTextWidth = textWidth;
+      byteCounter = 0;
+      textWidth = 0;
+
+      textHeight += (g_font_size + g_font_spacing);
+    }
+
+    if (tempByteCounter < byteCounter)
+      tempByteCounter = byteCounter;
+  }
+
+  if (tempTextWidth < textWidth)
+    tempTextWidth = textWidth;
+
+  textSize.x = tempTextWidth * scaleFactor +
+               (float)((tempByteCounter - 1) * g_font_spacing);
+  textSize.y = textHeight;
+
+  return textSize;
 }

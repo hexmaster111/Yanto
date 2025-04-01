@@ -1,0 +1,23 @@
+{
+    "files.associations": {
+        "*.tcc": "c",
+        "bitset": "c",
+        "random": "c",
+        "format": "c",
+        "fstream": "c",
+        "functional": "c",
+        "future": "c",
+        "limits": "c",
+        "optional": "c",
+        "sstream": "c",
+        "tuple": "c",
+        "type_traits": "c",
+        "variant": "c",
+        "rlgl.h": "c",
+        "raylib.h": "c",
+        "raymath.h": "c",
+        "json.h": "c",
+        "raygui.h": "c",
+        "stdio.h": "c"
+    }
+}
