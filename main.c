@@ -11,6 +11,7 @@
 #define DEFAULT_FONT_SIZE 12
 
 Vector2 MeasureTextEx2(const char *text, size_t text_len);
+void OnCurrsorLineChanged();
 
 void FreeAllLines(char **lines, int count)
 {
@@ -179,8 +180,6 @@ void RemoveChar(char *str, size_t str_len, int pos)
   {
     str[i] = str[i + 1];
   }
-
-  // str[str_len - 1] = '\0';
 }
 
 void BackspaceKeyPressed()
@@ -188,17 +187,56 @@ void BackspaceKeyPressed()
   struct Line *l = &g_lines[g_cursor_line];
 
   if (0 >= l->len)
-    return; // todo: Delete The line we are on
+  { // remove this line with no splicing and line shift lines up
+    free(l->base);
 
-  if (0 >= g_cursor_col)
-  {
-    return; // todo: Move the line up
+    for (size_t i = g_cursor_line; i < g_lines_count - 1; i++)
+    {
+      g_lines[i] = g_lines[i + 1];
+    }
+
+    g_lines_count--;
+    g_cursor_line -= 1;
+    g_cursor_col = g_lines[g_cursor_line].len;
+    OnCurrsorLineChanged();
   }
+  else if (0 >= g_cursor_col)
+  { // Move the line up, and splice with the existing line
+    if (g_cursor_line > 0)
+    {
+      struct Line *prev_line = &g_lines[g_cursor_line - 1];
+      size_t currsor_return_pos = prev_line->len;
+      size_t new_len = prev_line->len + l->len;
+      if (new_len > prev_line->cap)
+      {
+        prev_line->cap = new_len;
+        prev_line->base = realloc(prev_line->base, prev_line->cap);
+      }
 
-  RemoveChar(l->base, l->len, g_cursor_col - 1);
+      memcpy(prev_line->base + prev_line->len, l->base, l->len);
+      prev_line->len = new_len;
 
-  l->len -= 1;
-  g_cursor_col -= 1;
+      free(l->base);
+
+      for (size_t i = g_cursor_line; i < g_lines_count - 1; i++)
+      {
+        g_lines[i] = g_lines[i + 1];
+      }
+
+      g_lines_count--;
+      g_cursor_line -= 1;
+      g_cursor_col = currsor_return_pos;
+      OnCurrsorLineChanged();
+    }
+  }
+  else
+  {
+
+    RemoveChar(l->base, l->len, g_cursor_col - 1);
+
+    l->len -= 1;
+    g_cursor_col -= 1;
+  }
 }
 
 void DeleteKeyPressed()
@@ -206,16 +244,49 @@ void DeleteKeyPressed()
   struct Line *l = &g_lines[g_cursor_line];
 
   if (0 >= l->len)
-    return; // todo: Delete The line we are on
+  { // remove this line with no splicing
+    free(l->base);
 
-  if (l->len == g_cursor_col)
-  {
-    return; // todo: move the line below us up
+    for (size_t i = g_cursor_line; i < g_lines_count - 1; i++)
+    {
+      g_lines[i] = g_lines[i + 1];
+    }
+
+    g_lines_count--;
+    OnCurrsorLineChanged();
   }
+  else if (l->len == g_cursor_col)
+  { // move the line below us up to the current line and splice
+    if (g_cursor_line + 1 < g_lines_count)
+    {
+      struct Line *next_line = &g_lines[g_cursor_line + 1];
+      size_t new_len = l->len + next_line->len;
 
-  RemoveChar(l->base, l->len, g_cursor_col);
+      if (new_len > l->cap)
+      {
+        l->cap = new_len;
+        l->base = realloc(l->base, l->cap);
+      }
 
-  l->len -= 1;
+      memcpy(l->base + l->len, next_line->base, next_line->len);
+      l->len = new_len;
+
+      free(next_line->base);
+
+      for (size_t i = g_cursor_line + 1; i < g_lines_count - 1; i++)
+      {
+        g_lines[i] = g_lines[i + 1];
+      }
+
+      g_lines_count--;
+      OnCurrsorLineChanged();
+    }
+  }
+  else
+  {
+    RemoveChar(l->base, l->len, g_cursor_col);
+    l->len -= 1;
+  }
 }
 
 void EnterKeyPressed()
@@ -249,6 +320,8 @@ void EnterKeyPressed()
     g_cursor_line += 1;
     g_cursor_col = 0;
   }
+
+  OnCurrsorLineChanged();
 }
 
 void InsertCharAtCurrsor(char c)
@@ -340,8 +413,9 @@ int main()
   g_cursor_line = 0;
   g_cursor_col = 0;
 
-  LoadTextFile("test_small.fc");
+  // LoadTextFile("test_small.fc");
   // LoadTextFile("test.fc");
+  LoadTextFile("main.c");
 
   OnResize();
 
@@ -350,6 +424,11 @@ int main()
   while (!WindowShouldClose())
   {
     redraw_count++;
+
+    if (IsWindowResized())
+    {
+      OnResize();
+    }
 
     if (IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL))
     {
@@ -486,11 +565,6 @@ int main()
         InsertCharAtCurrsor(c);
 
       } while (c);
-    }
-
-    if (IsWindowResized())
-    {
-      OnResize();
     }
 
     if (0 > g_topline)
