@@ -7,6 +7,8 @@
 #include <string.h>
 
 #define TAB_SIZE 4
+#define LINE_NUMBERS_SUPPORTED 3
+#define DEFAULT_FONT_SIZE 12
 
 Vector2 MeasureTextEx2(const char *text, size_t text_len);
 
@@ -116,8 +118,6 @@ int g_screen_line_count;
 int g_cursor_line, g_cursor_col;
 
 Camera2D g_x_scroll_view = {.zoom = 1}; // used to scroll left and right
-
-#define LINENUMBERSUPPORT 3
 
 void GrowString(struct Line *l)
 {
@@ -237,11 +237,11 @@ void EnterKeyPressed()
     struct Line *old_line = &g_lines[g_cursor_line];
 
     size_t new_line_len = old_line->len - g_cursor_col;
-    
+
     new_line->base = calloc(new_line_len, sizeof(char));
     new_line->cap = new_line_len;
     new_line->len = new_line_len;
-    
+
     memcpy(new_line->base, old_line->base + g_cursor_col, new_line_len);
 
     old_line->len = g_cursor_col;
@@ -271,7 +271,7 @@ void InsertCharAtCurrsor(char c)
   g_cursor_col += 1;
 }
 
-void FDrawText(const char *text, int x, int y, Color color)
+void FDrawText(const char *text, float x, float y, Color color)
 {
   DrawTextEx(g_font, text, (Vector2){x, y}, g_font_size, 1, color);
 }
@@ -332,7 +332,7 @@ int main()
   }
   g_font_spacing = 1;
 
-  g_font_size = 12;
+  g_font_size = DEFAULT_FONT_SIZE;
   g_topline = 0;
   g_lines_count = 0;
   g_lines = NULL;
@@ -340,8 +340,8 @@ int main()
   g_cursor_line = 0;
   g_cursor_col = 0;
 
-  // LoadTextFile("test_small.fc");
-  LoadTextFile("test.fc");
+  LoadTextFile("test_small.fc");
+  // LoadTextFile("test.fc");
 
   OnResize();
 
@@ -367,7 +367,7 @@ int main()
 
       if (IsKeyPressed(KEY_ZERO))
       {
-        g_font_size = 12;
+        g_font_size = DEFAULT_FONT_SIZE;
         OnResize();
       }
 
@@ -451,6 +451,9 @@ int main()
         g_topline = g_lines_count - g_screen_line_count;
       }
 
+      if (0 > g_topline)
+        g_topline = 0;
+
       g_x_scroll_view.offset.x += scroll.x * 30;
       if (g_x_scroll_view.offset.x > 0)
         g_x_scroll_view.offset.x = 0;
@@ -461,7 +464,7 @@ int main()
 
         for (size_t i = g_topline; i < (g_screen_line_count + g_topline); i++)
         {
-          Rectangle r = {g_font_size * LINENUMBERSUPPORT - 1,
+          Rectangle r = {g_font_size * LINE_NUMBERS_SUPPORTED - 1,
                          (i - g_topline) * g_font_size, GetScreenWidth(),
                          g_font_size};
 
@@ -511,12 +514,12 @@ int main()
 
     for (size_t i = g_topline; i < (g_screen_line_count + g_topline); i++)
     {
-      FDrawText(TextFormat("%*d", LINENUMBERSUPPORT, i + 1), 3,
+      FDrawText(TextFormat("%*d", LINE_NUMBERS_SUPPORTED, i + 1), 3,
                 (i - g_topline) * g_font_size, BLACK);
 
       if (i == g_cursor_line)
       {
-        DrawRectangle(g_font_size * LINENUMBERSUPPORT - 1,
+        DrawRectangle(g_font_size * LINE_NUMBERS_SUPPORTED - 1,
                       (i - g_topline) * g_font_size, GetScreenWidth(),
                       g_font_size, (Color){0xee, 0xe8, 0xd5, 0xFF});
       }
@@ -524,14 +527,14 @@ int main()
       if (i >= g_lines_count)
         break;
       FDrawText(TextFormat("%.*s", g_lines[i].len, g_lines[i].base),
-                g_font_size * LINENUMBERSUPPORT - 1,
+                g_font_size * LINE_NUMBERS_SUPPORTED - 1,
                 (i - g_topline) * g_font_size, BLACK);
     }
 
     struct Line *l = &g_lines[g_cursor_line];
 
     Vector2 linelen = MeasureTextEx2(l->base, g_cursor_col);
-    linelen.x += g_font_size * LINENUMBERSUPPORT - 1;
+    linelen.x += g_font_size * LINE_NUMBERS_SUPPORTED - 1;
 
     float cy = (g_cursor_line - g_topline) * g_font_size;
 
