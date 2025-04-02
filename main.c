@@ -117,6 +117,7 @@ int g_topline;
 int g_screen_line_count;
 
 int g_cursor_line, g_cursor_col;
+char g_open_file_path[1024] = {0};
 
 Camera2D g_x_scroll_view = {.zoom = 1}; // used to scroll left and right
 
@@ -200,34 +201,32 @@ void BackspaceKeyPressed()
     g_cursor_col = g_lines[g_cursor_line].len;
     OnCurrsorLineChanged();
   }
-  else if (0 >= g_cursor_col)
+  else if (0 >= g_cursor_col && g_cursor_line > 0)
   { // Move the line up, and splice with the existing line
-    if (g_cursor_line > 0)
+
+    struct Line *prev_line = &g_lines[g_cursor_line - 1];
+    size_t currsor_return_pos = prev_line->len;
+    size_t new_len = prev_line->len + l->len;
+    if (new_len > prev_line->cap)
     {
-      struct Line *prev_line = &g_lines[g_cursor_line - 1];
-      size_t currsor_return_pos = prev_line->len;
-      size_t new_len = prev_line->len + l->len;
-      if (new_len > prev_line->cap)
-      {
-        prev_line->cap = new_len;
-        prev_line->base = realloc(prev_line->base, prev_line->cap);
-      }
-
-      memcpy(prev_line->base + prev_line->len, l->base, l->len);
-      prev_line->len = new_len;
-
-      free(l->base);
-
-      for (size_t i = g_cursor_line; i < g_lines_count - 1; i++)
-      {
-        g_lines[i] = g_lines[i + 1];
-      }
-
-      g_lines_count--;
-      g_cursor_line -= 1;
-      g_cursor_col = currsor_return_pos;
-      OnCurrsorLineChanged();
+      prev_line->cap = new_len;
+      prev_line->base = realloc(prev_line->base, prev_line->cap);
     }
+
+    memcpy(prev_line->base + prev_line->len, l->base, l->len);
+    prev_line->len = new_len;
+
+    free(l->base);
+
+    for (size_t i = g_cursor_line; i < g_lines_count - 1; i++)
+    {
+      g_lines[i] = g_lines[i + 1];
+    }
+
+    g_lines_count--;
+    g_cursor_line -= 1;
+    g_cursor_col = currsor_return_pos;
+    OnCurrsorLineChanged();
   }
   else
   {
@@ -255,32 +254,30 @@ void DeleteKeyPressed()
     g_lines_count--;
     OnCurrsorLineChanged();
   }
-  else if (l->len == g_cursor_col)
+  else if (l->len == g_cursor_col && g_cursor_line + 1 < g_lines_count)
   { // move the line below us up to the current line and splice
-    if (g_cursor_line + 1 < g_lines_count)
+
+    struct Line *next_line = &g_lines[g_cursor_line + 1];
+    size_t new_len = l->len + next_line->len;
+
+    if (new_len > l->cap)
     {
-      struct Line *next_line = &g_lines[g_cursor_line + 1];
-      size_t new_len = l->len + next_line->len;
-
-      if (new_len > l->cap)
-      {
-        l->cap = new_len;
-        l->base = realloc(l->base, l->cap);
-      }
-
-      memcpy(l->base + l->len, next_line->base, next_line->len);
-      l->len = new_len;
-
-      free(next_line->base);
-
-      for (size_t i = g_cursor_line + 1; i < g_lines_count - 1; i++)
-      {
-        g_lines[i] = g_lines[i + 1];
-      }
-
-      g_lines_count--;
-      OnCurrsorLineChanged();
+      l->cap = new_len;
+      l->base = realloc(l->base, l->cap);
     }
+
+    memcpy(l->base + l->len, next_line->base, next_line->len);
+    l->len = new_len;
+
+    free(next_line->base);
+
+    for (size_t i = g_cursor_line + 1; i < g_lines_count - 1; i++)
+    {
+      g_lines[i] = g_lines[i + 1];
+    }
+
+    g_lines_count--;
+    OnCurrsorLineChanged();
   }
   else
   {
@@ -374,6 +371,7 @@ void LoadTextFile(const char *filepath)
   }
 
   SetWindowTitle(TextFormat("%s - FCON", GetFileName(filepath)));
+  memcpy(g_open_file_path, filepath, strlen(filepath));
 }
 
 void OnResize() { g_screen_line_count = (GetScreenHeight() / g_font_size) - 1; /*for status*/ }
@@ -414,8 +412,8 @@ int main()
   g_cursor_col = 0;
 
   // LoadTextFile("test_small.fc");
-  // LoadTextFile("test.fc");
-  LoadTextFile("main.c");
+  LoadTextFile("test.fc");
+  // LoadTextFile("main.c");
 
   OnResize();
 
@@ -432,6 +430,24 @@ int main()
 
     if (IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL))
     {
+      if (IsKeyPressed(KEY_S))
+      {
+        FILE *f = fopen(g_open_file_path, "w");
+        if(!f) {
+          perror(TextFormat("Error Opening %s for writing:", g_open_file_path));
+          goto DONE_SAVING;
+        }
+
+        for (size_t i = 0; i < g_lines_count; i++)
+        {
+          fwrite(g_lines[i].base, sizeof(char), g_lines[i].len, f);
+          fwrite("\n", sizeof(char), 1, f);
+        }
+
+        fclose(f);
+        DONE_SAVING:
+      }
+
       if (IsKeyPressed(KEY_EQUAL) || IsKeyPressedRepeat(KEY_EQUAL))
       {
         g_font_size += 1.0f;
@@ -586,38 +602,44 @@ int main()
     ClearBackground((Color){0xfd, 0xf6, 0xe3, 0xFF});
     BeginMode2D(g_x_scroll_view);
 
-    for (size_t i = g_topline; i < (g_screen_line_count + g_topline); i++)
-    {
-      FDrawText(TextFormat("%*d", LINE_NUMBERS_SUPPORTED, i + 1), 3,
-                (i - g_topline) * g_font_size, BLACK);
-
-      if (i == g_cursor_line)
+    { // Text Rendering
+      for (size_t i = g_topline; i < (g_screen_line_count + g_topline); i++)
       {
-        DrawRectangle(g_font_size * LINE_NUMBERS_SUPPORTED - 1,
-                      (i - g_topline) * g_font_size, GetScreenWidth(),
-                      g_font_size, (Color){0xee, 0xe8, 0xd5, 0xFF});
-      }
+        FDrawText(TextFormat("%*d", LINE_NUMBERS_SUPPORTED, i + 1), 3,
+                  (i - g_topline) * g_font_size, BLACK);
 
-      if (i >= g_lines_count)
-        break;
-      FDrawText(TextFormat("%.*s", g_lines[i].len, g_lines[i].base),
-                g_font_size * LINE_NUMBERS_SUPPORTED - 1,
-                (i - g_topline) * g_font_size, BLACK);
+        if (i == g_cursor_line)
+        {
+          DrawRectangle(g_font_size * LINE_NUMBERS_SUPPORTED - 1,
+                        (i - g_topline) * g_font_size, GetScreenWidth(),
+                        g_font_size, (Color){0xee, 0xe8, 0xd5, 0xFF});
+        }
+
+        if (i >= g_lines_count)
+          break;
+        FDrawText(TextFormat("%.*s", g_lines[i].len, g_lines[i].base),
+                  g_font_size * LINE_NUMBERS_SUPPORTED - 1,
+                  (i - g_topline) * g_font_size, BLACK);
+      }
     }
 
-    struct Line *l = &g_lines[g_cursor_line];
+    { // currsor rendering
+      struct Line *l = &g_lines[g_cursor_line];
+      Vector2 linelen = MeasureTextEx2(l->base, g_cursor_col);
+      linelen.x += g_font_size * LINE_NUMBERS_SUPPORTED - 1;
+      float cy = (g_cursor_line - g_topline) * g_font_size;
+      DrawLineV((Vector2){linelen.x, cy}, (Vector2){linelen.x, cy + g_font_size},
+                BLACK);
+    }
 
-    Vector2 linelen = MeasureTextEx2(l->base, g_cursor_col);
-    linelen.x += g_font_size * LINE_NUMBERS_SUPPORTED - 1;
+    { // statusbar rendering
+      int status_y = GetScreenHeight() - g_font_size;
+      DrawRectangle(0, status_y, GetScreenWidth(), g_font_size, (Color){0xd8, 0xd4, 0xc4, 0xff});
+    }
 
-    float cy = (g_cursor_line - g_topline) * g_font_size;
-
-    DrawLineV((Vector2){linelen.x, cy}, (Vector2){linelen.x, cy + g_font_size},
-              BLACK);
-
-    DrawText(TextFormat("TOP IDX: %d\n%u\n%f\n%f", g_topline, redraw_count, cy,
-                        linelen.x),
-             40, GetScreenHeight() - g_font_size * 4, g_font_size, PURPLE);
+    // DrawText(TextFormat("TOP IDX: %d\n%u\n%f\n%f", g_topline, redraw_count, cy,
+    //                     linelen.x),
+    //          40, GetScreenHeight() - g_font_size * 4, g_font_size, PURPLE);
 
     EndMode2D();
     EndDrawing();
