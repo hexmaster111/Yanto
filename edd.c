@@ -9,6 +9,7 @@
 #define TAB_SIZE 4
 #define LINE_NUMBERS_SUPPORTED 3
 #define DEFAULT_FONT_SIZE 12
+#define INIT_LINE_COUNT 5
 
 Vector2 MeasureTextEx2(const char *text, size_t text_len);
 void OnCurrsorLineChanged();
@@ -134,7 +135,7 @@ void GrowString(struct Line *l)
 void AppendLine()
 {
   g_lines = realloc(g_lines, sizeof(struct Line) * (g_lines_count + 1));
-  printf("%d\n", g_lines_count);
+  printf("%zu\n", g_lines_count);
   g_lines[g_lines_count].base = 0;
   g_lines[g_lines_count].cap = 0;
   g_lines[g_lines_count].len = 0;
@@ -142,8 +143,7 @@ void AppendLine()
 }
 
 void InsertChar(char *str, size_t str_len, char ch, int pos)
-{
-  // Shift characters to the right
+{// Shift characters to the right
   for (int i = str_len; i >= pos; i--)
   {
     str[i + 1] = str[i];
@@ -154,8 +154,7 @@ void InsertChar(char *str, size_t str_len, char ch, int pos)
 }
 
 struct Line *InsertLine(size_t idx)
-{
-  // returns new line, reallocs g_lines, scoots over the existing lines, inserts new line
+{ // returns new line, reallocs g_lines, scoots over the existing lines, inserts new line
   struct Line new_line = {0};
 
   // Reallocate g_lines to make space for the new line
@@ -175,8 +174,7 @@ struct Line *InsertLine(size_t idx)
 }
 
 void RemoveChar(char *str, size_t str_len, int pos)
-{
-  // Shift characters to the left
+{  // Shift characters to the left
   for (int i = pos; i < str_len - 1; i++)
   {
     str[i] = str[i + 1];
@@ -230,7 +228,6 @@ void BackspaceKeyPressed()
   }
   else
   {
-
     RemoveChar(l->base, l->len, g_cursor_col - 1);
 
     l->len -= 1;
@@ -276,7 +273,7 @@ void DeleteKeyPressed()
       g_lines[i] = g_lines[i + 1];
     }
 
-    g_lines_count--;
+    g_lines_count -= 1;
     OnCurrsorLineChanged();
   }
   else
@@ -401,8 +398,8 @@ int main()
     TraceLog(LOG_WARNING, "Could not load font, using default.");
     g_font = GetFontDefault();
   }
-  g_font_spacing = 1;
 
+  g_font_spacing = 1;
   g_font_size = DEFAULT_FONT_SIZE;
   g_topline = 0;
   g_lines_count = 0;
@@ -410,15 +407,23 @@ int main()
   g_screen_line_count = 0;
   g_cursor_line = 0;
   g_cursor_col = 0;
-
+  
   // LoadTextFile("test_small.fc");
-  LoadTextFile("test.fc");
+  // LoadTextFile("test.fc");
   // LoadTextFile("main.c");
-
+  g_lines = malloc(sizeof(struct Line) * INIT_LINE_COUNT);
+  g_lines_count = INIT_LINE_COUNT;
+  for (size_t i = 0; i < INIT_LINE_COUNT; i++) {
+    g_lines[i].base = NULL;
+    g_lines[i].cap = 0;
+    g_lines[i].len = 0;
+  }
+  
+  
   OnResize();
-
+  
   unsigned redraw_count = 0;
-
+  
   while (!WindowShouldClose())
   {
     redraw_count++;
@@ -445,7 +450,7 @@ int main()
         }
 
         fclose(f);
-        DONE_SAVING:
+        DONE_SAVING:;
       }
 
       if (IsKeyPressed(KEY_EQUAL) || IsKeyPressedRepeat(KEY_EQUAL))
