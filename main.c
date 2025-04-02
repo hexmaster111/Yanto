@@ -6,6 +6,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#define TAB_SIZE 4
+
 Vector2 MeasureTextEx2(const char *text, size_t text_len);
 
 void FreeAllLines(char **lines, int count)
@@ -104,9 +106,9 @@ float g_font_size, g_font_spacing;
 struct Line
 {
   char *base;
-  int len, cap;
+  size_t len, cap;
 } *g_lines;
-int g_lines_count;
+size_t g_lines_count;
 
 int g_topline;
 int g_screen_line_count;
@@ -119,7 +121,8 @@ Camera2D g_x_scroll_view = {.zoom = 1}; // used to scroll left and right
 
 void GrowString(struct Line *l)
 {
-  int new_cap = (l->cap + 1) * 2;
+  size_t new_cap = (l->cap + 1) * 2;
+
   char *new = realloc(l->base, new_cap);
 
   l->base = new;
@@ -148,25 +151,105 @@ void InsertChar(char *str, size_t str_len, char ch, int pos)
   str[pos] = ch;
 }
 
-void RemoveChar(char *str, size_t str_len, int pos)
+struct Line *InsertLine(size_t idx)
 {
-  printf("NOT IMPLIMENTED: %s:%d:%s\n", __FILE__, __LINE__, __func__);
-  exit(1);
+  // returns new line, reallocs g_lines, scoots over the existing lines, inserts new line
+  struct Line new_line = {0};
+
+  // Reallocate g_lines to make space for the new line
+  g_lines = realloc(g_lines, sizeof(struct Line) * (g_lines_count + 1));
+
+  // Shift lines after the insertion point
+  for (size_t i = g_lines_count; i > idx; i--)
+  {
+    g_lines[i] = g_lines[i - 1];
+  }
+
+  // Insert the new line at the specified index
+  g_lines[idx] = new_line;
+  g_lines_count++;
+
+  return &g_lines[idx];
 }
 
-void Backspace()
+void RemoveChar(char *str, size_t str_len, int pos)
+{
+  // Shift characters to the left
+  for (int i = pos; i < str_len - 1; i++)
+  {
+    str[i] = str[i + 1];
+  }
+
+  // str[str_len - 1] = '\0';
+}
+
+void BackspaceKeyPressed()
 {
   struct Line *l = &g_lines[g_cursor_line];
 
   if (0 >= l->len)
     return; // todo: Delete The line we are on
 
-  RemoveChar(l->base, l->cap, g_cursor_col);
+  if (0 >= g_cursor_col)
+  {
+    return; // todo: Move the line up
+  }
 
+  RemoveChar(l->base, l->len, g_cursor_col - 1);
+
+  l->len -= 1;
   g_cursor_col -= 1;
 }
 
-void NewLine() {}
+void DeleteKeyPressed()
+{
+  struct Line *l = &g_lines[g_cursor_line];
+
+  if (0 >= l->len)
+    return; // todo: Delete The line we are on
+
+  if (l->len == g_cursor_col)
+  {
+    return; // todo: move the line below us up
+  }
+
+  RemoveChar(l->base, l->len, g_cursor_col);
+
+  l->len -= 1;
+}
+
+void EnterKeyPressed()
+{
+  if (0 >= g_cursor_col)
+  { // at the start of the line, so we insert a new one at the pos and shift down
+    InsertLine(g_cursor_line);
+    g_cursor_line += 1;
+  }
+  else if (g_cursor_col >= g_lines[g_cursor_line].len)
+  { // at the end of the line, so we insert below and move cursor down
+    InsertLine(g_cursor_line + 1);
+    g_cursor_line += 1;
+  }
+  else
+  { // we are somewhere in the center of the line, so we need to split it
+
+    struct Line *new_line = InsertLine(g_cursor_line + 1);
+    struct Line *old_line = &g_lines[g_cursor_line];
+
+    size_t new_line_len = old_line->len - g_cursor_col;
+    
+    new_line->base = calloc(new_line_len, sizeof(char));
+    new_line->cap = new_line_len;
+    new_line->len = new_line_len;
+    
+    memcpy(new_line->base, old_line->base + g_cursor_col, new_line_len);
+
+    old_line->len = g_cursor_col;
+
+    g_cursor_line += 1;
+    g_cursor_col = 0;
+  }
+}
 
 void InsertCharAtCurrsor(char c)
 {
@@ -179,14 +262,12 @@ void InsertCharAtCurrsor(char c)
 
   if (l->len + 1 > l->cap)
   {
-    printf("Growing\n");
     GrowString(l);
   }
 
-  printf("%p len:%d  cap:%d\n", l->base, l->len, l->cap);
   InsertChar(l->base, l->len - 1, c, g_cursor_col);
-  l->len += 1;
 
+  l->len += 1;
   g_cursor_col += 1;
 }
 
@@ -222,7 +303,7 @@ void LoadTextFile(const char *filepath)
   SetWindowTitle(TextFormat("%s - FCON", GetFileName(filepath)));
 }
 
-void OnResize() { g_screen_line_count = GetScreenHeight() / g_font_size; }
+void OnResize() { g_screen_line_count = (GetScreenHeight() / g_font_size) - 1; /*for status*/ }
 
 void OnCurrsorLineChanged()
 {
@@ -272,13 +353,13 @@ int main()
 
     if (IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL))
     {
-      if (IsKeyPressed(KEY_EQUAL))
+      if (IsKeyPressed(KEY_EQUAL) || IsKeyPressedRepeat(KEY_EQUAL))
       {
         g_font_size += 1.0f;
         OnResize();
       }
 
-      if (IsKeyPressed(KEY_MINUS))
+      if (IsKeyPressed(KEY_MINUS) || IsKeyPressedRepeat(KEY_MINUS))
       {
         g_font_size -= 1.0f;
         OnResize();
@@ -341,12 +422,55 @@ int main()
 
       if (IsKeyPressed(KEY_BACKSPACE) || IsKeyPressedRepeat(KEY_BACKSPACE))
       {
-        Backspace();
+        BackspaceKeyPressed();
+      }
+
+      if (IsKeyPressed(KEY_DELETE) || IsKeyPressedRepeat(KEY_DELETE))
+      {
+        DeleteKeyPressed();
       }
 
       if (IsKeyPressed(KEY_ENTER) || IsKeyPressedRepeat(KEY_ENTER))
       {
-        NewLine();
+        EnterKeyPressed();
+      }
+
+      if (IsKeyPressed(KEY_TAB) || IsKeyPressedRepeat(KEY_TAB))
+      {
+        for (size_t i = 0; i < TAB_SIZE; i++)
+        {
+          InsertCharAtCurrsor(' ');
+        }
+      }
+
+      Vector2 scroll = GetMouseWheelMoveV();
+      g_topline -= scroll.y * 2;
+
+      if (g_topline + g_screen_line_count > g_lines_count)
+      {
+        g_topline = g_lines_count - g_screen_line_count;
+      }
+
+      g_x_scroll_view.offset.x += scroll.x * 30;
+      if (g_x_scroll_view.offset.x > 0)
+        g_x_scroll_view.offset.x = 0;
+
+      if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT))
+      {
+        Vector2 pt = GetMousePosition();
+
+        for (size_t i = g_topline; i < (g_screen_line_count + g_topline); i++)
+        {
+          Rectangle r = {g_font_size * LINENUMBERSUPPORT - 1,
+                         (i - g_topline) * g_font_size, GetScreenWidth(),
+                         g_font_size};
+
+          if (CheckCollisionPointRec(pt, r))
+          {
+            g_cursor_line = i;
+            break;
+          }
+        }
       }
 
       int c;
@@ -366,36 +490,6 @@ int main()
       OnResize();
     }
 
-    Vector2 scroll = GetMouseWheelMoveV();
-    g_topline -= scroll.y * 2;
-
-    if (g_topline + g_screen_line_count > g_lines_count)
-    {
-      g_topline = g_lines_count - g_screen_line_count;
-    }
-
-    g_x_scroll_view.offset.x += scroll.x * 30;
-    if (g_x_scroll_view.offset.x > 0)
-      g_x_scroll_view.offset.x = 0;
-
-    if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT))
-    {
-      Vector2 pt = GetMousePosition();
-
-      for (size_t i = g_topline; i < (g_screen_line_count + g_topline); i++)
-      {
-        Rectangle r = {g_font_size * LINENUMBERSUPPORT - 1,
-                       (i - g_topline) * g_font_size, GetScreenWidth(),
-                       g_font_size};
-
-        if (CheckCollisionPointRec(pt, r))
-        {
-          g_cursor_line = i;
-          break;
-        }
-      }
-    }
-
     if (0 > g_topline)
       g_topline = 0;
 
@@ -406,7 +500,10 @@ int main()
       g_cursor_col = 0;
 
     if (g_cursor_line >= g_lines_count)
-      g_cursor_line = g_lines_count;
+      g_cursor_line = g_lines_count - 1;
+
+    if (g_cursor_col > g_lines[g_cursor_line].len)
+      g_cursor_col = g_lines[g_cursor_line].len;
 
     BeginDrawing();
     ClearBackground((Color){0xfd, 0xf6, 0xe3, 0xFF});
