@@ -143,7 +143,7 @@ void AppendLine()
 }
 
 void InsertChar(char *str, size_t str_len, char ch, int pos)
-{// Shift characters to the right
+{ // Shift characters to the right
   for (int i = str_len; i >= pos; i--)
   {
     str[i + 1] = str[i];
@@ -174,7 +174,7 @@ struct Line *InsertLine(size_t idx)
 }
 
 void RemoveChar(char *str, size_t str_len, int pos)
-{  // Shift characters to the left
+{ // Shift characters to the left
   for (int i = pos; i < str_len - 1; i++)
   {
     str[i] = str[i + 1];
@@ -185,7 +185,7 @@ void BackspaceKeyPressed()
 {
   struct Line *l = &g_lines[g_cursor_line];
 
-  if (0 >= l->len)
+  if (0 >= l->len && 0 < g_cursor_line)
   { // remove this line with no splicing and line shift lines up
     free(l->base);
 
@@ -196,8 +196,10 @@ void BackspaceKeyPressed()
 
     g_lines_count--;
     g_cursor_line -= 1;
-    g_cursor_col = g_lines[g_cursor_line].len;
-    OnCurrsorLineChanged();
+
+      g_cursor_col = g_lines[g_cursor_line].len;
+      OnCurrsorLineChanged();
+    
   }
   else if (0 >= g_cursor_col && g_cursor_line > 0)
   { // Move the line up, and splice with the existing line
@@ -226,7 +228,7 @@ void BackspaceKeyPressed()
     g_cursor_col = currsor_return_pos;
     OnCurrsorLineChanged();
   }
-  else
+  else if (0 < g_cursor_col)
   {
     RemoveChar(l->base, l->len, g_cursor_col - 1);
 
@@ -343,6 +345,7 @@ void FDrawText(const char *text, float x, float y, Color color)
   DrawTextEx(g_font, text, (Vector2){x, y}, g_font_size, 1, color);
 }
 
+
 void LoadTextFile(const char *filepath)
 {
   g_cursor_line = 0;
@@ -392,7 +395,13 @@ int main()
   SetTargetFPS(60);
   EnableEventWaiting();
 
-  g_font = LoadFont("romulus.png");
+  Image img = LoadImage("romulus.png");
+  g_font = LoadFontFromImage(img, MAGENTA, ' ');
+  UnloadImage(img);
+
+  TraceLog(LOG_INFO, "Loaded font with %d Glyphs", g_font.glyphCount);
+
+
   if (!IsFontValid(g_font))
   {
     TraceLog(LOG_WARNING, "Could not load font, using default.");
@@ -407,23 +416,45 @@ int main()
   g_screen_line_count = 0;
   g_cursor_line = 0;
   g_cursor_col = 0;
-  
+
   // LoadTextFile("test_small.fc");
   // LoadTextFile("test.fc");
   // LoadTextFile("main.c");
   g_lines = malloc(sizeof(struct Line) * INIT_LINE_COUNT);
   g_lines_count = INIT_LINE_COUNT;
-  for (size_t i = 0; i < INIT_LINE_COUNT; i++) {
-    g_lines[i].base = NULL;
-    g_lines[i].cap = 0;
+  for (size_t i = 0; i < INIT_LINE_COUNT; i++)
+  {
+    g_lines[i].base = malloc(g_font.glyphCount);
+    g_lines[i].cap = g_font.glyphCount;
     g_lines[i].len = 0;
   }
-  
-  
+
+  for (size_t i = 0; i < g_font.glyphCount; i++)
+  {
+    g_lines[0].base[i] = i + ' ';
+  }
+  g_lines[0].len = g_font.glyphCount;
+
+  g_lines[1].base[0] = '~' + 3;
+  g_lines[1].len = 1;
+
+  int idx = GetGlyphIndex(g_font, 'a');
+  int idxa = GetGlyphIndex(g_font, '~' + 1);
+  int idxb = GetGlyphIndex(g_font, '~' + 2);
+  int idxc = GetGlyphIndex(g_font, '~' + 3);
+  int idxd = GetGlyphIndex(g_font, '~' + 4);
+
+
+  // g_lines[0].base[0] = '\x7E';
+  // g_lines[0].base[1] = '\x7F';
+  // g_lines[0].base[2] = '\x80';
+
+
+
   OnResize();
-  
+
   unsigned redraw_count = 0;
-  
+
   while (!WindowShouldClose())
   {
     redraw_count++;
@@ -438,7 +469,8 @@ int main()
       if (IsKeyPressed(KEY_S))
       {
         FILE *f = fopen(g_open_file_path, "w");
-        if(!f) {
+        if (!f)
+        {
           perror(TextFormat("Error Opening %s for writing:", g_open_file_path));
           goto DONE_SAVING;
         }
@@ -450,7 +482,7 @@ int main()
         }
 
         fclose(f);
-        DONE_SAVING:;
+      DONE_SAVING:;
       }
 
       if (IsKeyPressed(KEY_EQUAL) || IsKeyPressedRepeat(KEY_EQUAL))
@@ -597,7 +629,7 @@ int main()
     if (0 > g_cursor_col)
       g_cursor_col = 0;
 
-    if (g_cursor_line >= g_lines_count)
+    if (g_cursor_line >= g_lines_count - 1)
       g_cursor_line = g_lines_count - 1;
 
     if (g_cursor_col > g_lines[g_cursor_line].len)
