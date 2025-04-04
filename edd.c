@@ -14,95 +14,8 @@
 Vector2 MeasureTextEx2(const char *text, size_t text_len);
 void OnCurrsorLineChanged();
 
-void FreeAllLines(char **lines, int count)
-{
-  for (int i = 0; i < count; i++)
-  {
-    free(lines[i]);
-  }
-
-  free(lines);
-}
-
-char **ReadAllLines(const char *fname, int *out_linecount)
-{
-  FILE *f = fopen(fname, "r");
-
-  if (f == NULL)
-    return NULL;
-
-  int arraylen = 1024;
-  int strlen = 1024;
-
-  int lines_used = 0;
-  int chars_read = 0;
-
-  char **ret = malloc(sizeof(char *) * arraylen);
-  ret[lines_used] = malloc(strlen);
-
-  while (1)
-  {
-    if (feof(f))
-    {
-      // we are all done reading, finlise the last line
-      ret[lines_used] =
-          realloc(ret[lines_used], chars_read); // shrink string to be size read
-      ret[lines_used][chars_read - 1] = 0;      // terminate the string
-      lines_used++;
-      break;
-    }
-
-    char c = fgetc(f);
-
-    if (ferror(f))
-    {
-      perror("fgetc");
-      return NULL;
-    }
-
-    if (chars_read > strlen)
-    {
-      strlen *= 2;
-      ret[lines_used] = realloc(ret[lines_used], strlen);
-    }
-
-    if (c == '\n')
-    {
-      // store this line
-
-      ret[lines_used] = realloc(
-          ret[lines_used], chars_read + 1); // shrink string to be size read
-      ret[lines_used][chars_read] = 0;      // terminate the string
-
-      strlen = 1024; // reset var
-      chars_read = 0;
-
-      lines_used += 1;
-
-      if (lines_used >= arraylen) // grow the continaing array
-      {
-        arraylen *= 2;
-        ret = realloc(ret, arraylen * sizeof(char *));
-      }
-      ret[lines_used] = malloc(strlen); // alloc the next string
-      continue;
-    }
-    else if (c == '\r' || c == '\n' && 0 >= chars_read)
-    {
-      // we just got a stray \r or \n
-      continue;
-    }
-
-    ret[lines_used][chars_read] = c;
-    chars_read += 1;
-  }
-
-  // resize the return array to fit used
-  ret = realloc(ret, lines_used * sizeof(char *));
-
-  *out_linecount = lines_used;
-  return ret;
-}
+void FreeAllLines(char **lines, int count);
+char **ReadAllLines(const char *fname, int *out_linecount);
 
 Font g_font;
 float g_font_size, g_font_spacing;
@@ -197,9 +110,8 @@ void BackspaceKeyPressed()
     g_lines_count--;
     g_cursor_line -= 1;
 
-      g_cursor_col = g_lines[g_cursor_line].len;
-      OnCurrsorLineChanged();
-    
+    g_cursor_col = g_lines[g_cursor_line].len;
+    OnCurrsorLineChanged();
   }
   else if (0 >= g_cursor_col && g_cursor_line > 0)
   { // Move the line up, and splice with the existing line
@@ -345,7 +257,6 @@ void FDrawText(const char *text, float x, float y, Color color)
   DrawTextEx(g_font, text, (Vector2){x, y}, g_font_size, 1, color);
 }
 
-
 void LoadTextFile(const char *filepath)
 {
   g_cursor_line = 0;
@@ -391,16 +302,18 @@ void OnCurrsorLineChanged()
 
 int main()
 {
+  SetConfigFlags(FLAG_WINDOW_RESIZABLE | FLAG_WINDOW_HIGHDPI | FLAG_MSAA_4X_HINT | FLAG_VSYNC_HINT);
   InitWindow(800, 600, "FCON");
   SetTargetFPS(60);
   EnableEventWaiting();
 
-  Image img = LoadImage("romulus.png");
+  Image img = LoadImage("fonts/romulus.png");
   g_font = LoadFontFromImage(img, MAGENTA, ' ');
   UnloadImage(img);
 
-  TraceLog(LOG_INFO, "Loaded font with %d Glyphs", g_font.glyphCount);
+  // g_font = LoadFontEx("fonts/TerminusTTF-4.49.3.ttf", 14, NULL, 0);
 
+  TraceLog(LOG_INFO, "Loaded font with %d Glyphs", g_font.glyphCount);
 
   if (!IsFontValid(g_font))
   {
@@ -419,46 +332,22 @@ int main()
 
   // LoadTextFile("test_small.fc");
   // LoadTextFile("test.fc");
-  // LoadTextFile("main.c");
+
   g_lines = malloc(sizeof(struct Line) * INIT_LINE_COUNT);
   g_lines_count = INIT_LINE_COUNT;
+
   for (size_t i = 0; i < INIT_LINE_COUNT; i++)
   {
-    g_lines[i].base = malloc(g_font.glyphCount);
-    g_lines[i].cap = g_font.glyphCount;
-    g_lines[i].len = 0;
+    g_lines[i].base = NULL;
+    g_lines[i].cap = g_lines[i].len = 0;
   }
 
-  for (size_t i = 0; i < g_font.glyphCount; i++)
-  {
-    g_lines[0].base[i] = i + ' ';
-  }
-  g_lines[0].len = g_font.glyphCount;
-
-  g_lines[1].base[0] = '~' + 3;
-  g_lines[1].len = 1;
-
-  int idx = GetGlyphIndex(g_font, 'a');
-  int idxa = GetGlyphIndex(g_font, '~' + 1);
-  int idxb = GetGlyphIndex(g_font, '~' + 2);
-  int idxc = GetGlyphIndex(g_font, '~' + 3);
-  int idxd = GetGlyphIndex(g_font, '~' + 4);
-
-
-  // g_lines[0].base[0] = '\x7E';
-  // g_lines[0].base[1] = '\x7F';
-  // g_lines[0].base[2] = '\x80';
-
-
+  LoadTextFile("table.fc");
 
   OnResize();
 
-  unsigned redraw_count = 0;
-
   while (!WindowShouldClose())
   {
-    redraw_count++;
-
     if (IsWindowResized())
     {
       OnResize();
@@ -603,6 +492,28 @@ int main()
           if (CheckCollisionPointRec(pt, r))
           {
             g_cursor_line = i;
+
+            // now that we found the line, lets find the col that we are on
+            struct Line *line = &g_lines[i];
+            printf("%p\n", line);
+
+            if (g_cursor_line >= g_lines_count|| line->len == 0)
+            {
+              g_cursor_col = 0;
+            }
+            else
+            {
+              for (size_t col = 0; col <= line->len; col++)
+              {
+                Vector2 textSize = MeasureTextEx2(line->base, col);
+                if (pt.x < textSize.x + g_font_size * LINE_NUMBERS_SUPPORTED)
+                {
+                  g_cursor_col = col;
+                  break;
+                }
+              }
+            }
+
             break;
           }
         }
@@ -665,13 +576,14 @@ int main()
       Vector2 linelen = MeasureTextEx2(l->base, g_cursor_col);
       linelen.x += g_font_size * LINE_NUMBERS_SUPPORTED - 1;
       float cy = (g_cursor_line - g_topline) * g_font_size;
-      DrawLineV((Vector2){linelen.x, cy}, (Vector2){linelen.x, cy + g_font_size},
-                BLACK);
+      DrawLineEx((Vector2){linelen.x, cy}, (Vector2){linelen.x, cy + g_font_size}, 2, BLACK);
     }
 
     { // statusbar rendering
       int status_y = GetScreenHeight() - g_font_size;
       DrawRectangle(0, status_y, GetScreenWidth(), g_font_size, (Color){0xd8, 0xd4, 0xc4, 0xff});
+      // DrawTextCodepoint(g_font, '~' + 2, (Vector2){10, status_y}, g_font_size, BLACK);
+      DrawTextEx(g_font, TextFormat("Font Size %.0f", g_font_size), (Vector2){10, status_y}, g_font_size, g_font_spacing, BLACK);
     }
 
     // DrawText(TextFormat("TOP IDX: %d\n%u\n%f\n%f", g_topline, redraw_count, cy,
@@ -746,4 +658,94 @@ Vector2 MeasureTextEx2(const char *text, size_t text_len)
   textSize.y = textHeight;
 
   return textSize;
+}
+
+void FreeAllLines(char **lines, int count)
+{
+  for (int i = 0; i < count; i++)
+  {
+    free(lines[i]);
+  }
+
+  free(lines);
+}
+
+char **ReadAllLines(const char *fname, int *out_linecount)
+{
+  FILE *f = fopen(fname, "r");
+
+  if (f == NULL)
+    return NULL;
+
+  int arraylen = 1024;
+  int strlen = 1024;
+
+  int lines_used = 0;
+  int chars_read = 0;
+
+  char **ret = malloc(sizeof(char *) * arraylen);
+  ret[lines_used] = malloc(strlen);
+
+  while (1)
+  {
+    if (feof(f))
+    {
+      // we are all done reading, finlise the last line
+      ret[lines_used] =
+          realloc(ret[lines_used], chars_read); // shrink string to be size read
+      ret[lines_used][chars_read - 1] = 0;      // terminate the string
+      lines_used++;
+      break;
+    }
+
+    char c = fgetc(f);
+
+    if (ferror(f))
+    {
+      perror("fgetc");
+      return NULL;
+    }
+
+    if (chars_read > strlen)
+    {
+      strlen *= 2;
+      ret[lines_used] = realloc(ret[lines_used], strlen);
+    }
+
+    if (c == '\n')
+    {
+      // store this line
+
+      ret[lines_used] = realloc(
+          ret[lines_used], chars_read + 1); // shrink string to be size read
+      ret[lines_used][chars_read] = 0;      // terminate the string
+
+      strlen = 1024; // reset var
+      chars_read = 0;
+
+      lines_used += 1;
+
+      if (lines_used >= arraylen) // grow the continaing array
+      {
+        arraylen *= 2;
+        ret = realloc(ret, arraylen * sizeof(char *));
+      }
+      ret[lines_used] = malloc(strlen); // alloc the next string
+      continue;
+    }
+    else if (c == '\r' || c == '\n' && 0 >= chars_read)
+    {
+      // we just got a stray \r or \n
+      continue;
+    }
+
+    ret[lines_used][chars_read] = c;
+    chars_read += 1;
+  }
+
+  // resize the return array to fit used
+  ret = realloc(ret, lines_used * sizeof(char *));
+
+  *out_linecount = lines_used;
+  return ret;
 }
