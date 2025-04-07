@@ -300,7 +300,7 @@ void OnCurrsorLineChanged()
   }
 }
 
-int main()
+int main(int argc, char *argv[])
 {
   SetConfigFlags(FLAG_WINDOW_RESIZABLE | FLAG_WINDOW_HIGHDPI | FLAG_MSAA_4X_HINT | FLAG_VSYNC_HINT);
   InitWindow(800, 600, "FCON");
@@ -333,16 +333,21 @@ int main()
   // LoadTextFile("test_small.fc");
   // LoadTextFile("test.fc");
 
-  g_lines = malloc(sizeof(struct Line) * INIT_LINE_COUNT);
-  g_lines_count = INIT_LINE_COUNT;
-
-  for (size_t i = 0; i < INIT_LINE_COUNT; i++)
+  if (argc == 2)
   {
-    g_lines[i].base = NULL;
-    g_lines[i].cap = g_lines[i].len = 0;
+    LoadTextFile(argv[1]);
   }
+  else
+  {
+    g_lines = malloc(sizeof(struct Line) * INIT_LINE_COUNT);
+    g_lines_count = INIT_LINE_COUNT;
 
-  LoadTextFile("table.fc");
+    for (size_t i = 0; i < INIT_LINE_COUNT; i++)
+    {
+      g_lines[i].base = NULL;
+      g_lines[i].cap = g_lines[i].len = 0;
+    }
+  }
 
   OnResize();
 
@@ -497,7 +502,7 @@ int main()
             struct Line *line = &g_lines[i];
             printf("%p\n", line);
 
-            if (g_cursor_line >= g_lines_count|| line->len == 0)
+            if (g_cursor_line >= g_lines_count || line->len == 0)
             {
               g_cursor_col = 0;
             }
