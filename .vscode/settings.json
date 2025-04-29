@@ -18,6 +18,7 @@
         "raymath.h": "c",
         "json.h": "c",
         "raygui.h": "c",
-        "stdio.h": "c"
+        "stdio.h": "c",
+        "SOMEWHERE.C": "cpp"
     }
 }

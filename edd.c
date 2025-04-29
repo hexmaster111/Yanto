@@ -10,6 +10,7 @@
 #define LINE_NUMBERS_SUPPORTED 3
 #define DEFAULT_FONT_SIZE 12
 #define INIT_LINE_COUNT 5
+#define BACKGROUND_COLOR ((Color){0xfd, 0xf6, 0xe3, 0xFF})
 
 Vector2 MeasureTextEx2(const char *text, size_t text_len);
 void OnCurrsorLineChanged();
@@ -300,12 +301,92 @@ void OnCurrsorLineChanged()
   }
 }
 
+bool IsFileOpen()
+{
+  if (g_open_file_path[0] == '\0')
+    return false;
+
+  return true;
+}
+
+#include <ctype.h>
+
+void AskUserToPickWhereToSaveTo()
+{
+  while (GetCharPressed())
+    ; // get rid of all those keys in the buffer
+
+  char lbuf[sizeof(g_open_file_path)];
+  memset(lbuf, 0, sizeof(lbuf));
+
+  size_t lbufidx = 0;
+  bool rundialog = true;
+
+  while (rundialog & !WindowShouldClose())
+  {
+    int k = GetCharPressed();
+
+    while (k != 0)
+    {
+      if (isprint(k))
+      {
+        lbuf[lbufidx] = k;
+        lbufidx += 1;
+      }
+      else
+      {
+        printf("Unknown char #%d", k);
+      }
+
+      k = GetCharPressed();
+    }
+
+    if (IsKeyPressed(KEY_ENTER))
+    {
+      rundialog = false;
+      memcpy(g_open_file_path, lbuf, sizeof(lbuf));
+    }
+
+    if (IsKeyPressed(KEY_ESCAPE))
+    {
+      rundialog = false;
+    }
+
+    if (IsKeyPressed(KEY_BACKSPACE))
+    {
+      lbufidx -= 1;
+      if (0 > lbufidx)
+        lbufidx = 0;
+
+      lbuf[lbufidx] = '\0';
+    }
+
+    BeginDrawing();
+
+    const char *userinput = TextFormat("> %s", lbuf);
+
+    Vector2 inputsize = MeasureTextEx2(userinput, strlen(userinput));
+
+    FDrawText("Where should I save to?", GetScreenWidth() / 2, GetScreenHeight() / 2, BLACK);
+
+    DrawRectangle(GetScreenWidth() / 2, (GetScreenHeight() / 2) + g_font_size,
+                  inputsize.x * 1.5, g_font_size, BACKGROUND_COLOR);
+
+    FDrawText(userinput, GetScreenWidth() / 2, (GetScreenHeight() / 2) + g_font_size, BLACK);
+
+    EndDrawing();
+  }
+}
+
+#include "osfd.c"
+
 int main(int argc, char *argv[])
 {
   SetConfigFlags(FLAG_WINDOW_RESIZABLE | FLAG_WINDOW_HIGHDPI | FLAG_MSAA_4X_HINT | FLAG_VSYNC_HINT);
   InitWindow(800, 600, "FCON");
   SetTargetFPS(60);
   EnableEventWaiting();
+  SetExitKey(KEY_NULL);
 
   Image img = LoadImage("fonts/romulus.png");
   g_font = LoadFontFromImage(img, MAGENTA, ' ');
@@ -362,6 +443,22 @@ int main(int argc, char *argv[])
     {
       if (IsKeyPressed(KEY_S))
       {
+        if (!IsFileOpen())
+        {
+          // AskUserToPickWhereToSaveTo();
+          DisableEventWaiting();
+          const char *newPath = SaveFileDialog(GetApplicationDirectory(), "*");
+          EnableEventWaiting();
+        
+          if (newPath == NULL)
+            goto DONE_SAVING;
+        }
+
+        if (!IsFileOpen())
+        {
+          goto DONE_SAVING;
+        }
+
         FILE *f = fopen(g_open_file_path, "w");
         if (!f)
         {
@@ -552,7 +649,7 @@ int main(int argc, char *argv[])
       g_cursor_col = g_lines[g_cursor_line].len;
 
     BeginDrawing();
-    ClearBackground((Color){0xfd, 0xf6, 0xe3, 0xFF});
+    ClearBackground(BACKGROUND_COLOR);
     BeginMode2D(g_x_scroll_view);
 
     { // Text Rendering
