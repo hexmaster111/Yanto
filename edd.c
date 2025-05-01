@@ -441,18 +441,23 @@ int main(int argc, char *argv[])
 
     if (IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL))
     {
+
+      if (IsKeyPressed(KEY_O))
+      {
+        DisableEventWaiting();
+        const char *newPath = OpenFileDialog(GetApplicationDirectory(), "*");
+        printf("opening : %s\n", newPath);
+        if (newPath)
+        {
+          LoadTextFile(newPath);
+        }
+
+        EnableEventWaiting();
+
+      }
+
       if (IsKeyPressed(KEY_S))
       {
-        if (!IsFileOpen())
-        {
-          // AskUserToPickWhereToSaveTo();
-          // DisableEventWaiting();
-          const char *newPath = SaveFileDialog(GetApplicationDirectory(), "*");
-          // EnableEventWaiting();
-        
-          if (newPath == NULL)
-            goto DONE_SAVING;
-        }
 
         if (!IsFileOpen())
         {

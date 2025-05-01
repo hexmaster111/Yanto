@@ -21,15 +21,23 @@
 #define OSFD_TEXTBOX_BG (LIGHTGRAY)
 #define OSFD_TEXTBOX_FG (BLACK)
 
-#define OSFD_FONTSIZE (18)
-#define OSFD_FONTSPACING (1)
+#define OSFD_DIRSEP ('/')
 
-#define SAVE_TEXT ("Save")
+#define OPEN_TEXT ("Open")
 #define CANCEL_TEXT ("Cancel")
+#define BACK_TEXT ("BCK")
+#define FORWARD_TEXT ("FWD")
+#define BROWSEUP_TEXT ("UP")
+#define REFRESH_TEXT ("REF")
 
-Font g_font;
+extern Font g_font;
+extern float g_font_size;
+extern float g_font_spacing;
 
-int osfd_MeasureText(const char *text) { return MeasureText(text, OSFD_FONTSIZE); }
+int osfd_MeasureText(const char *text)
+{
+    return MeasureTextEx(g_font, text, g_font_size, g_font_spacing).x;
+}
 
 Vector2 osfd_MeasureTextEx2(const char *text, size_t text_len)
 {
@@ -44,8 +52,8 @@ Vector2 osfd_MeasureTextEx2(const char *text, size_t text_len)
     float textWidth = 0.0f;
     float tempTextWidth = 0.0f; // Used to count longer text line width
 
-    float textHeight = OSFD_FONTSIZE;
-    float scaleFactor = OSFD_FONTSIZE / (float)g_font.baseSize;
+    float textHeight = g_font_size;
+    float scaleFactor = g_font_size / (float)g_font.baseSize;
 
     int letter = 0; // Current character
     int index = 0;  // Index position in sprite font
@@ -74,7 +82,7 @@ Vector2 osfd_MeasureTextEx2(const char *text, size_t text_len)
             byteCounter = 0;
             textWidth = 0;
 
-            textHeight += (OSFD_FONTSIZE + OSFD_FONTSPACING);
+            textHeight += (g_font_size + g_font_spacing);
         }
 
         if (tempByteCounter < byteCounter)
@@ -85,16 +93,16 @@ Vector2 osfd_MeasureTextEx2(const char *text, size_t text_len)
         tempTextWidth = textWidth;
 
     textSize.x = tempTextWidth * scaleFactor +
-                 (float)((tempByteCounter - 1) * OSFD_FONTSPACING);
+                 (float)((tempByteCounter - 1) * g_font_spacing);
     textSize.y = textHeight;
 
     return textSize;
 }
 
 // true on click
-bool osfd_TextButton(const char *text, int x, int y)
+bool osfd_TextButton(const char *text, int x, int y, int textWidth)
 {
-    Rectangle me = {x, y, osfd_MeasureText(text), OSFD_FONTSIZE};
+    Rectangle me = {x, y, textWidth, g_font_size};
 
     bool hovered = CheckCollisionPointRec(GetMousePosition(), me);
     bool clicked = hovered && IsMouseButtonReleased(MOUSE_BUTTON_LEFT);
@@ -121,8 +129,7 @@ bool osfd_TextButton(const char *text, int x, int y)
     }
 
     DrawRectangleRec(me, bg);
-    DrawText(text, x, y, OSFD_FONTSIZE, fg);
-
+    DrawTextEx(g_font, text, (Vector2){x, y}, g_font_size, g_font_spacing, fg);
     return clicked;
 }
 
@@ -166,27 +173,29 @@ bool osfd_TextBox(char *text, int textcap, int x, int y, int width, bool selecte
         len += 1;
     }
 
-    DrawRectangle(x, y, width, OSFD_FONTSIZE, OSFD_TEXTBOX_BG);
-    DrawText(text, x, y, OSFD_FONTSIZE, OSFD_TEXTBOX_FG);
+    DrawRectangle(x, y, width, g_font_size, OSFD_TEXTBOX_BG);
+    DrawTextEx(g_font, text, (Vector2){x, y}, g_font_size, g_font_spacing, OSFD_TEXTBOX_FG);
 
     if (selected_for_input && currsor_flash)
     {
         Vector2 cpos = osfd_MeasureTextEx2(text, currsor_pos);
-        DrawRectangle(cpos.x + x, y, 1, OSFD_FONTSIZE, OSFD_TEXTBOX_FG);
+        DrawRectangle(cpos.x + x, y, 1, g_font_size, OSFD_TEXTBOX_FG);
     }
 
     return IsMouseButtonReleased(MOUSE_BUTTON_LEFT) &&
-           CheckCollisionPointRec(GetMousePosition(), (Rectangle){x, y, width, OSFD_FONTSIZE});
+           CheckCollisionPointRec(GetMousePosition(), (Rectangle){x, y, width, g_font_size});
 }
 
-const char *SaveFileDialog(
+#include <stdio.h>
+
+const char *OpenFileDialog(
     const char *initalPath,
     const char *extention)
 {
-    g_font = GetFontDefault();
     static char return_buffer[MAX_PATH];
     memset(return_buffer, 0, sizeof(return_buffer));
 
+    bool run = true;
     char fname[MAX_FILENAME];
     char cwd[MAX_PATH];
     memset(cwd, 0, sizeof(cwd));
@@ -196,21 +205,30 @@ const char *SaveFileDialog(
     // FilePathList filesindir = LoadDirectoryFilesEx(cwd, extention, false);
     FilePathList filesindir = LoadDirectoryFiles(cwd);
 
-    while (!WindowShouldClose() & !IsKeyPressed(KEY_ESCAPE))
+    while (!IsKeyPressed(KEY_ESCAPE) && run)
     {
         Rectangle outline = {
             100,
             100,
-            400,
+            500,
             300,
         };
+
+        if (IsKeyDown(KEY_LEFT_CONTROL) && IsKeyPressed(KEY_EQUAL))
+        {
+            g_font_size += 1;
+        }
+        else if (IsKeyDown(KEY_LEFT_CONTROL) && IsKeyPressed(KEY_MINUS))
+        {
+            g_font_size -= 1;
+        }
 
         // Rendering
 
         /*
-        -------------------------------------
-        |⏪ ⏩ 🔼 [C:\Some\Path        ] 🔃     |
-        |-----------------------------------|
+        --------------------------------------
+        |⏪ ⏩ 🔼 [C:\Some\Path        ]🔃 |
+        |------------------------------------|
         | 📂 something                       |
         | 📂 some dir                        |
         | 📂 a cool dir                      |
@@ -228,46 +246,100 @@ const char *SaveFileDialog(
         BeginDrawing();
         DrawRectangleRec(outline, OSFD_BACKGROUND);
 
-        int save_text_measure = osfd_MeasureText(SAVE_TEXT);
+        int open_text_measure = osfd_MeasureText(OPEN_TEXT);
         int cancel_text_measure = osfd_MeasureText(CANCEL_TEXT);
-        int back_text_measutre = osfd_MeasureText("BCK");
-        int forward_text_measure = osfd_MeasureText("FWD");
-        int filename_width = outline.width - (save_text_measure + cancel_text_measure);
+        int filename_width = outline.width - (open_text_measure + cancel_text_measure);
+        int back_text_measutre = osfd_MeasureText(BACK_TEXT);
+        int forward_text_measure = osfd_MeasureText(FORWARD_TEXT);
+        int up_text_measure = osfd_MeasureText(BROWSEUP_TEXT);
+        int refresh_text_measure = osfd_MeasureText(REFRESH_TEXT);
+        int filepath_width = (outline.width - refresh_text_measure) - (back_text_measutre + forward_text_measure + up_text_measure);
 
-        osfd_TextBox(fname, sizeof(fname), outline.x, outline.y + outline.height - OSFD_FONTSIZE, filename_width, true);
+        bool fnameClicked = osfd_TextBox(fname, sizeof(fname),
+                                         outline.x,
+                                         outline.y + outline.height - g_font_size,
+                                         filename_width,
+                                         false);
 
-        bool saveClicked = osfd_TextButton(SAVE_TEXT,
-                                           (outline.x + outline.width) - (save_text_measure + cancel_text_measure),
-                                           (outline.y + outline.height) - OSFD_FONTSIZE);
+        bool fpathClicked = osfd_TextBox(cwd, sizeof(cwd),
+                                         outline.x + forward_text_measure + back_text_measutre + up_text_measure,
+                                         outline.y, filepath_width,
+                                         true);
+
+        bool openClicked = osfd_TextButton(OPEN_TEXT,
+                                           (outline.x + outline.width) - (open_text_measure + cancel_text_measure),
+                                           (outline.y + outline.height) - g_font_size, open_text_measure);
 
         bool cancelClicked = osfd_TextButton(CANCEL_TEXT,
                                              (outline.x + outline.width) - (cancel_text_measure),
-                                             (outline.y + outline.height) - OSFD_FONTSIZE);
+                                             (outline.y + outline.height) - g_font_size, cancel_text_measure);
 
-        bool backClicked = osfd_TextButton("BCK", outline.x, outline.y);
-        bool forwardClicked = osfd_TextButton("FWD", outline.x + forward_text_measure, outline.y);
+        bool backClicked = osfd_TextButton(BACK_TEXT, outline.x, outline.y, back_text_measutre);
+        bool forwardClicked = osfd_TextButton(FORWARD_TEXT, outline.x + back_text_measutre, outline.y, forward_text_measure);
+        bool upDirClicked = osfd_TextButton(BROWSEUP_TEXT, outline.x + forward_text_measure + back_text_measutre, outline.y, up_text_measure);
+        bool refreshClicked = osfd_TextButton(REFRESH_TEXT,
+                                              outline.x + forward_text_measure + back_text_measutre + up_text_measure + filepath_width,
+                                              outline.y, refresh_text_measure);
 
         for (size_t i = 0; i < filesindir.count; i++)
         {
             const char *fp = filesindir.paths[i];
-            DrawText(GetFileName(fp),
-                     outline.x,
-                     outline.y + (OSFD_FONTSIZE * (i + 1)),
-                     OSFD_FONTSIZE, OSFD_FORGROUND);
+            const char *cfn = GetFileName(fp);
+            int fnlen = osfd_MeasureText(cfn);
+
+            bool isDir = DirectoryExists(fp);
+
+            if (osfd_TextButton(GetFileName(fp),
+                                outline.x,
+                                outline.y + (g_font_size * (i + 1)),
+                                outline.width))
+            {
+                printf("%s\n", cwd);
+
+                if (isDir)
+                {
+                    size_t cwdlen = strlen(cwd);
+                    memcpy(cwd + cwdlen, cfn, strlen(cfn));
+                    
+                    cwd[strlen(cwd)] = OSFD_DIRSEP;
+
+                    printf("%s\n", cwd);
+                    if (filesindir.paths)
+                        UnloadDirectoryFiles(filesindir);
+                    filesindir = LoadDirectoryFiles(cwd);
+                }
+                else
+                {
+                    memset(fname, 0, sizeof(fname));
+                    memcpy(fname, cfn, strlen(cfn));
+                }
+            }
         }
 
         EndDrawing();
 
         if (cancelClicked)
         {
+
+            if (filesindir.paths)
+                UnloadDirectoryFiles(filesindir);
+
             return NULL;
         }
 
-        if (saveClicked)
+        if (openClicked)
         {
             break;
         }
     }
 
+    if (filesindir.paths)
+    {
+        UnloadDirectoryFiles(filesindir);
+    }
+
+    int cwdlen = strlen(cwd);
+    memcpy(return_buffer, cwd, cwdlen);
+    memcpy(return_buffer + cwdlen, fname, strlen(fname));
     return return_buffer;
 }
