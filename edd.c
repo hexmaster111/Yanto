@@ -446,9 +446,9 @@ int main(int argc, char *argv[])
         if (!IsFileOpen())
         {
           // AskUserToPickWhereToSaveTo();
-          DisableEventWaiting();
+          // DisableEventWaiting();
           const char *newPath = SaveFileDialog(GetApplicationDirectory(), "*");
-          EnableEventWaiting();
+          // EnableEventWaiting();
         
           if (newPath == NULL)
             goto DONE_SAVING;

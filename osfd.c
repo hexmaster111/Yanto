@@ -22,7 +22,7 @@
 #define OSFD_TEXTBOX_FG (BLACK)
 
 #define OSFD_FONTSIZE (18)
-#define OSFD_FONTSPACING (3)
+#define OSFD_FONTSPACING (1)
 
 #define SAVE_TEXT ("Save")
 #define CANCEL_TEXT ("Cancel")
@@ -146,10 +146,12 @@ bool osfd_TextBox(char *text, int textcap, int x, int y, int width, bool selecte
             currsor_flash = !currsor_flash;
         }
 
-        if(IsKeyPressed(KEY_BACKSPACE)){
-            if(len > 0){
+        if (IsKeyPressed(KEY_BACKSPACE) || IsKeyPressedRepeat(KEY_BACKSPACE))
+        {
+            if (len > 0)
+            {
                 len -= 1;
-                text[lenselected_for_input] = '\0';
+                text[len] = '\0';
             }
         }
     }
@@ -191,7 +193,10 @@ const char *SaveFileDialog(
     memcpy(cwd, initalPath, strlen(initalPath));
     memset(fname, 0, sizeof(fname));
 
-    while (!WindowShouldClose() && !IsKeyPressed(KEY_ESCAPE))
+    // FilePathList filesindir = LoadDirectoryFilesEx(cwd, extention, false);
+    FilePathList filesindir = LoadDirectoryFiles(cwd);
+
+    while (!WindowShouldClose() & !IsKeyPressed(KEY_ESCAPE))
     {
         Rectangle outline = {
             100,
@@ -203,9 +208,9 @@ const char *SaveFileDialog(
         // Rendering
 
         /*
-        ---------------------------------------
-        |⏪ ⏩ 🔼 [C:\Some\Path        ] 🔃 |
-        |-------------------------------------|
+        -------------------------------------
+        |⏪ ⏩ 🔼 [C:\Some\Path        ] 🔃     |
+        |-----------------------------------|
         | 📂 something                       |
         | 📂 some dir                        |
         | 📂 a cool dir                      |
@@ -225,6 +230,8 @@ const char *SaveFileDialog(
 
         int save_text_measure = osfd_MeasureText(SAVE_TEXT);
         int cancel_text_measure = osfd_MeasureText(CANCEL_TEXT);
+        int back_text_measutre = osfd_MeasureText("BCK");
+        int forward_text_measure = osfd_MeasureText("FWD");
         int filename_width = outline.width - (save_text_measure + cancel_text_measure);
 
         osfd_TextBox(fname, sizeof(fname), outline.x, outline.y + outline.height - OSFD_FONTSIZE, filename_width, true);
@@ -236,6 +243,18 @@ const char *SaveFileDialog(
         bool cancelClicked = osfd_TextButton(CANCEL_TEXT,
                                              (outline.x + outline.width) - (cancel_text_measure),
                                              (outline.y + outline.height) - OSFD_FONTSIZE);
+
+        bool backClicked = osfd_TextButton("BCK", outline.x, outline.y);
+        bool forwardClicked = osfd_TextButton("FWD", outline.x + forward_text_measure, outline.y);
+
+        for (size_t i = 0; i < filesindir.count; i++)
+        {
+            const char *fp = filesindir.paths[i];
+            DrawText(GetFileName(fp),
+                     outline.x,
+                     outline.y + (OSFD_FONTSIZE * (i + 1)),
+                     OSFD_FONTSIZE, OSFD_FORGROUND);
+        }
 
         EndDrawing();
 
