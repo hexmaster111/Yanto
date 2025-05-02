@@ -19,6 +19,9 @@
         "json.h": "c",
         "raygui.h": "c",
         "stdio.h": "c",
-        "SOMEWHERE.C": "cpp"
-    }
+        "SOMEWHERE.C": "cpp",
+        "string.h": "c",
+        "cstdlib": "c"
+    },
+    "C_Cpp.errorSquiggles": "disabled"
 }

@@ -453,11 +453,24 @@ int main(int argc, char *argv[])
         }
 
         EnableEventWaiting();
-
       }
 
       if (IsKeyPressed(KEY_S))
       {
+        DisableEventWaiting();
+        const char *newPath = SaveFileDialog(GetApplicationDirectory(), "*");
+        printf("opening : %s\n", newPath);
+        if (newPath)
+        {
+          LoadTextFile(newPath);
+        }
+
+        EnableEventWaiting();
+
+        if (!IsFileOpen())
+        {
+          goto DONE_SAVING;
+        }
 
         if (!IsFileOpen())
         {
