@@ -30,6 +30,7 @@
 #define BROWSEUP_TEXT ("UP")
 #define REFRESH_TEXT ("REF")
 
+// your program shoud define these as non-static
 extern Font g_font;
 extern float g_font_size;
 extern float g_font_spacing;
@@ -92,8 +93,7 @@ Vector2 osfd_MeasureTextEx2(const char *text, size_t text_len)
     if (tempTextWidth < textWidth)
         tempTextWidth = textWidth;
 
-    textSize.x = tempTextWidth * scaleFactor +
-                 (float)((tempByteCounter - 1) * g_font_spacing);
+    textSize.x = tempTextWidth * scaleFactor + (float)((tempByteCounter - 1) * g_font_spacing);
     textSize.y = textHeight;
 
     return textSize;
@@ -344,9 +344,9 @@ const char *osfd_DialogCore(
         }
 
         TBAction tp_path_action = osfd_TextBox(cwd, sizeof(cwd),
-                                             outline.x + forward_text_measure + back_text_measutre + up_text_measure,
-                                             outline.y, filepath_width,
-                                             element_focused == 2);
+                                               outline.x + forward_text_measure + back_text_measutre + up_text_measure,
+                                               outline.y, filepath_width,
+                                               element_focused == 2);
         if (tp_path_action == TBSelect)
         {
             element_focused = 2;

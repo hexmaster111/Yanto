@@ -6,6 +6,11 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include <ctype.h>
+
+#include "osfd.c"
+#include "interactivity.c"
+
 #define TAB_SIZE 4
 #define LINE_NUMBERS_SUPPORTED 3
 #define DEFAULT_FONT_SIZE 12
@@ -309,7 +314,6 @@ bool IsFileOpen()
   return true;
 }
 
-#include <ctype.h>
 
 void AskUserToPickWhereToSaveTo()
 {
@@ -378,7 +382,45 @@ void AskUserToPickWhereToSaveTo()
   }
 }
 
-#include "osfd.c"
+
+
+void SaveOpenFile()
+{
+  if (!IsFileOpen()) // new document
+  {
+    DisableEventWaiting();
+    const char *newPath = SaveFileDialog(GetApplicationDirectory(), "*");
+    printf("saving : %s\n", newPath);
+    if (newPath)
+    {
+      SetWindowTitle(TextFormat("%s - FCON", GetFileName(newPath)));
+      memset(g_open_file_path, 0, sizeof(g_open_file_path));
+      memcpy(g_open_file_path, newPath, strlen(newPath));
+    }
+    EnableEventWaiting();
+  }
+
+  if (!IsFileOpen())
+  {
+    return;
+  }
+
+  FILE *f = fopen(g_open_file_path, "w");
+  if (!f)
+  {
+    perror(TextFormat("Error Opening %s for writing:", g_open_file_path));
+    // TODO: Alert(TextFormat("Error Opening %s for writing:", g_open_file_path));
+    return;
+  }
+
+  for (size_t i = 0; i < g_lines_count; i++)
+  {
+    fwrite(g_lines[i].base, sizeof(char), g_lines[i].len, f);
+    fwrite("\n", sizeof(char), 1, f);
+  }
+
+  fclose(f);
+}
 
 int main(int argc, char *argv[])
 {
@@ -411,9 +453,6 @@ int main(int argc, char *argv[])
   g_cursor_line = 0;
   g_cursor_col = 0;
 
-  // LoadTextFile("test_small.fc");
-  // LoadTextFile("test.fc");
-
   if (argc == 2)
   {
     LoadTextFile(argv[1]);
@@ -432,6 +471,11 @@ int main(int argc, char *argv[])
 
   OnResize();
 
+
+  PopUp("Notice", "You are a turky", "OH|I See|No");
+
+
+
   while (!WindowShouldClose())
   {
     if (IsWindowResized())
@@ -441,8 +485,21 @@ int main(int argc, char *argv[])
 
     if (IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL))
     {
+      if (IsKeyPressed(KEY_S) && (IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT)))
+      {
+        DisableEventWaiting();
+        const char *saveAsPath = SaveFileDialog(GetApplicationDirectory(), "*");
+        if (saveAsPath)
+        {
+          printf("save as: %s\n", saveAsPath);
+          memset(g_open_file_path, 0, sizeof(g_open_file_path));
+          memcpy(g_open_file_path, saveAsPath, strlen(saveAsPath));
+          SaveOpenFile();
+        }
 
-      if (IsKeyPressed(KEY_O))
+        EnableEventWaiting();
+      }
+      else if (IsKeyPressed(KEY_O))
       {
         DisableEventWaiting();
         const char *newPath = OpenFileDialog(GetApplicationDirectory(), "*");
@@ -454,70 +511,30 @@ int main(int argc, char *argv[])
 
         EnableEventWaiting();
       }
-
-      if (IsKeyPressed(KEY_S))
+      else if (IsKeyPressed(KEY_S))
       {
-        DisableEventWaiting();
-        const char *newPath = SaveFileDialog(GetApplicationDirectory(), "*");
-        printf("opening : %s\n", newPath);
-        if (newPath)
-        {
-          LoadTextFile(newPath);
-        }
-
-        EnableEventWaiting();
-
-        if (!IsFileOpen())
-        {
-          goto DONE_SAVING;
-        }
-
-        if (!IsFileOpen())
-        {
-          goto DONE_SAVING;
-        }
-
-        FILE *f = fopen(g_open_file_path, "w");
-        if (!f)
-        {
-          perror(TextFormat("Error Opening %s for writing:", g_open_file_path));
-          goto DONE_SAVING;
-        }
-
-        for (size_t i = 0; i < g_lines_count; i++)
-        {
-          fwrite(g_lines[i].base, sizeof(char), g_lines[i].len, f);
-          fwrite("\n", sizeof(char), 1, f);
-        }
-
-        fclose(f);
-      DONE_SAVING:;
+        SaveOpenFile();
       }
-
-      if (IsKeyPressed(KEY_EQUAL) || IsKeyPressedRepeat(KEY_EQUAL))
+      else if (IsKeyPressed(KEY_EQUAL) || IsKeyPressedRepeat(KEY_EQUAL))
       {
         g_font_size += 1.0f;
         OnResize();
       }
-
-      if (IsKeyPressed(KEY_MINUS) || IsKeyPressedRepeat(KEY_MINUS))
+      else if (IsKeyPressed(KEY_MINUS) || IsKeyPressedRepeat(KEY_MINUS))
       {
         g_font_size -= 1.0f;
         OnResize();
       }
-
-      if (IsKeyPressed(KEY_ZERO))
+      else if (IsKeyPressed(KEY_ZERO))
       {
         g_font_size = DEFAULT_FONT_SIZE;
         OnResize();
       }
-
-      if (IsKeyPressed(KEY_UP) || IsKeyPressedRepeat(KEY_UP))
+      else if (IsKeyPressed(KEY_UP) || IsKeyPressedRepeat(KEY_UP))
       {
         g_topline -= 1;
       }
-
-      if (IsKeyPressed(KEY_DOWN) || IsKeyPressedRepeat(KEY_DOWN))
+      else if (IsKeyPressed(KEY_DOWN) || IsKeyPressedRepeat(KEY_DOWN))
       {
         g_topline += 1;
       }
@@ -531,52 +548,43 @@ int main(int argc, char *argv[])
         g_cursor_line -= g_screen_line_count - 5;
         OnCurrsorLineChanged();
       }
-
-      if (IsKeyPressed(KEY_PAGE_DOWN) || IsKeyPressedRepeat(KEY_PAGE_DOWN))
+      else if (IsKeyPressed(KEY_PAGE_DOWN) || IsKeyPressedRepeat(KEY_PAGE_DOWN))
       {
         g_topline += g_screen_line_count - 5;
         g_cursor_line += g_screen_line_count - 5;
         OnCurrsorLineChanged();
       }
-
-      if (IsKeyPressed(KEY_UP) || IsKeyPressedRepeat(KEY_UP))
+      else if (IsKeyPressed(KEY_UP) || IsKeyPressedRepeat(KEY_UP))
       {
         g_cursor_line -= 1;
         OnCurrsorLineChanged();
       }
-
-      if (IsKeyPressed(KEY_DOWN) || IsKeyPressedRepeat(KEY_DOWN))
+      else if (IsKeyPressed(KEY_DOWN) || IsKeyPressedRepeat(KEY_DOWN))
       {
         g_cursor_line += 1;
         OnCurrsorLineChanged();
       }
-
-      if (IsKeyPressed(KEY_LEFT) || IsKeyPressedRepeat(KEY_LEFT))
+      else if (IsKeyPressed(KEY_LEFT) || IsKeyPressedRepeat(KEY_LEFT))
       {
         g_cursor_col -= 1;
       }
-
-      if (IsKeyPressed(KEY_RIGHT) || IsKeyPressedRepeat(KEY_RIGHT))
+      else if (IsKeyPressed(KEY_RIGHT) || IsKeyPressedRepeat(KEY_RIGHT))
       {
         g_cursor_col += 1;
       }
-
-      if (IsKeyPressed(KEY_BACKSPACE) || IsKeyPressedRepeat(KEY_BACKSPACE))
+      else if (IsKeyPressed(KEY_BACKSPACE) || IsKeyPressedRepeat(KEY_BACKSPACE))
       {
         BackspaceKeyPressed();
       }
-
-      if (IsKeyPressed(KEY_DELETE) || IsKeyPressedRepeat(KEY_DELETE))
+      else if (IsKeyPressed(KEY_DELETE) || IsKeyPressedRepeat(KEY_DELETE))
       {
         DeleteKeyPressed();
       }
-
-      if (IsKeyPressed(KEY_ENTER) || IsKeyPressedRepeat(KEY_ENTER))
+      else if (IsKeyPressed(KEY_ENTER) || IsKeyPressedRepeat(KEY_ENTER))
       {
         EnterKeyPressed();
       }
-
-      if (IsKeyPressed(KEY_TAB) || IsKeyPressedRepeat(KEY_TAB))
+      else if (IsKeyPressed(KEY_TAB) || IsKeyPressedRepeat(KEY_TAB))
       {
         for (size_t i = 0; i < TAB_SIZE; i++)
         {

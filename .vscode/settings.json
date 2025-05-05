@@ -21,7 +21,13 @@
         "stdio.h": "c",
         "SOMEWHERE.C": "cpp",
         "string.h": "c",
-        "cstdlib": "c"
+        "cstdlib": "c",
+        "bit": "c",
+        "compare": "c",
+        "cstddef": "c",
+        "string": "c",
+        "memory": "c",
+        "new": "c"
     },
     "C_Cpp.errorSquiggles": "disabled"
 }
