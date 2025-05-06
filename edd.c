@@ -436,8 +436,9 @@ int main(int argc, char *argv[])
 
   SetExitKey(KEY_NULL);
 
-  Image img = LoadImage("fonts/romulus.png");
-  g_font = LoadFontFromImage(img, MAGENTA, ' ');
+  // Image img = LoadImage("fonts/romulus.png");
+  Image img = LoadImage("fonts/font.png");
+  g_font = LoadFontFromImage(img, MAGENTA, '!');
   UnloadImage(img);
 
   // g_font = LoadFontEx("fonts/TerminusTTF-4.49.3.ttf", 14, NULL, 0);

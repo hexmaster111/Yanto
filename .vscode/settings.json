@@ -27,7 +27,8 @@
         "cstddef": "c",
         "string": "c",
         "memory": "c",
-        "new": "c"
+        "new": "c",
+        "stdint.h": "c"
     },
     "C_Cpp.errorSquiggles": "disabled"
 }
