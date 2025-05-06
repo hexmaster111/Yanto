@@ -39,6 +39,10 @@ int g_screen_line_count;
 int g_cursor_line, g_cursor_col;
 char g_open_file_path[1024] = {0};
 
+bool g_file_changed = false;
+
+bool HasUnsavedChanges() { return g_file_changed; }
+
 Camera2D g_x_scroll_view = {.zoom = 1}; // used to scroll left and right
 
 void GrowString(struct Line *l)
@@ -118,6 +122,7 @@ void BackspaceKeyPressed()
 
     g_cursor_col = g_lines[g_cursor_line].len;
     OnCurrsorLineChanged();
+    g_file_changed = true;
   }
   else if (0 >= g_cursor_col && g_cursor_line > 0)
   { // Move the line up, and splice with the existing line
@@ -170,6 +175,7 @@ void DeleteKeyPressed()
 
     g_lines_count--;
     OnCurrsorLineChanged();
+    g_file_changed = true;
   }
   else if (l->len == g_cursor_col && g_cursor_line + 1 < g_lines_count)
   { // move the line below us up to the current line and splice
@@ -236,6 +242,7 @@ void EnterKeyPressed()
   }
 
   OnCurrsorLineChanged();
+  g_file_changed = true;
 }
 
 void InsertCharAtCurrsor(char c)
@@ -256,6 +263,7 @@ void InsertCharAtCurrsor(char c)
 
   l->len += 1;
   g_cursor_col += 1;
+  g_file_changed = true;
 }
 
 void FDrawText(const char *text, float x, float y, Color color)
@@ -313,7 +321,6 @@ bool IsFileOpen()
 
   return true;
 }
-
 
 void AskUserToPickWhereToSaveTo()
 {
@@ -382,13 +389,11 @@ void AskUserToPickWhereToSaveTo()
   }
 }
 
-
-
 void SaveOpenFile()
 {
   if (!IsFileOpen()) // new document
   {
-    DisableEventWaiting();
+
     const char *newPath = SaveFileDialog(GetApplicationDirectory(), "*");
     printf("saving : %s\n", newPath);
     if (newPath)
@@ -397,7 +402,6 @@ void SaveOpenFile()
       memset(g_open_file_path, 0, sizeof(g_open_file_path));
       memcpy(g_open_file_path, newPath, strlen(newPath));
     }
-    EnableEventWaiting();
   }
 
   if (!IsFileOpen())
@@ -408,8 +412,9 @@ void SaveOpenFile()
   FILE *f = fopen(g_open_file_path, "w");
   if (!f)
   {
-    perror(TextFormat("Error Opening %s for writing:", g_open_file_path));
-    // TODO: Alert(TextFormat("Error Opening %s for writing:", g_open_file_path));
+
+    Alert(TextFormat("Error Opening %s for writing:", g_open_file_path));
+
     return;
   }
 
@@ -420,6 +425,7 @@ void SaveOpenFile()
   }
 
   fclose(f);
+  g_file_changed = false;
 }
 
 int main(int argc, char *argv[])
@@ -427,7 +433,7 @@ int main(int argc, char *argv[])
   SetConfigFlags(FLAG_WINDOW_RESIZABLE | FLAG_WINDOW_HIGHDPI | FLAG_MSAA_4X_HINT | FLAG_VSYNC_HINT);
   InitWindow(800, 600, "FCON");
   SetTargetFPS(60);
-  EnableEventWaiting();
+
   SetExitKey(KEY_NULL);
 
   Image img = LoadImage("fonts/romulus.png");
@@ -471,13 +477,39 @@ int main(int argc, char *argv[])
 
   OnResize();
 
+  bool run = true;
 
-  PopUp("Notice", "You are a turky", "OH|I See|No");
-
-
-
-  while (!WindowShouldClose())
+  while (run)
   {
+
+    if (WindowShouldClose())
+    {
+      if (HasUnsavedChanges())
+      {
+
+        int resp = PopUp("You have unsaved changes", "",
+                         "Save and exit|I dont wanna exit|Throw it away and exit");
+
+        if (resp == 1)
+        {
+          SaveOpenFile();
+
+          if (HasUnsavedChanges())
+          {
+            continue;
+          }
+        }
+        else if (resp == 3)
+        {
+          goto EXIT;
+        }
+      }
+      else
+      {
+        goto EXIT;
+      }
+    }
+
     if (IsWindowResized())
     {
       OnResize();
@@ -487,7 +519,7 @@ int main(int argc, char *argv[])
     {
       if (IsKeyPressed(KEY_S) && (IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT)))
       {
-        DisableEventWaiting();
+
         const char *saveAsPath = SaveFileDialog(GetApplicationDirectory(), "*");
         if (saveAsPath)
         {
@@ -496,20 +528,16 @@ int main(int argc, char *argv[])
           memcpy(g_open_file_path, saveAsPath, strlen(saveAsPath));
           SaveOpenFile();
         }
-
-        EnableEventWaiting();
       }
       else if (IsKeyPressed(KEY_O))
       {
-        DisableEventWaiting();
+
         const char *newPath = OpenFileDialog(GetApplicationDirectory(), "*");
         printf("opening : %s\n", newPath);
         if (newPath)
         {
           LoadTextFile(newPath);
         }
-
-        EnableEventWaiting();
       }
       else if (IsKeyPressed(KEY_S))
       {
@@ -586,6 +614,7 @@ int main(int argc, char *argv[])
       }
       else if (IsKeyPressed(KEY_TAB) || IsKeyPressedRepeat(KEY_TAB))
       {
+        g_file_changed = true;
         for (size_t i = 0; i < TAB_SIZE; i++)
         {
           InsertCharAtCurrsor(' ');
@@ -721,6 +750,8 @@ int main(int argc, char *argv[])
     EndMode2D();
     EndDrawing();
   }
+
+EXIT:
 
   CloseWindow();
 

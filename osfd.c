@@ -316,7 +316,7 @@ const char *osfd_DialogCore(
         */
 
         BeginDrawing();
-        ClearBackground((Color){0xee, 0xee, 0xef});
+        // ClearBackground((Color){0xee, 0xee, 0xef});
         DrawRectangleRec(outline, OSFD_BACKGROUND);
 
         int accept_text_measure = osfd_MeasureText(acceptButtonText);

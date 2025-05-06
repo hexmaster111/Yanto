@@ -21,34 +21,74 @@ int PopUp(const char *title, const char *message, const char *buttons);
 void Alert(const char *message) { PopUp("Alert", message, "OK"); }
 
 /// @param buttons buttons seprated by a '|' char
-/// @return idx of button pressed
+/// @return idx of button pressed + 1 or 0 for escape
 int PopUp(const char *title, const char *message, const char *buttons)
 {
-    Rectangle pos = {100, 100, 200, g_font_size * 3};
-
+    
     // 10 buttons max, 255 chars
     char btn_txt[10][255] = {0};
-
+    
     int btnidx = 0;
     int charidx = 0;
-
+    
     const char *cur = buttons;
-
-
-
-    while (!WindowShouldClose())
+    
+    for (;; cur += 1)
     {
-        if (IsKeyPressed(KEY_ESCAPE) || IsKeyPressed(KEY_ENTER))
+        if (*cur == '|')
         {
+            charidx = 0;
+            btnidx += 1;
+        }
+        else if (*cur == '\0')
+        {
+            btnidx += 1;
+            break;
+        }
+        else
+        {
+            btn_txt[btnidx][charidx] = *cur;
+            charidx += 1;
+        }
+    }
+    charidx = 0;
+
+
+    Rectangle pos = {100, 100, 200, g_font_size * (3 + (btnidx - 1))};
+    
+
+    while (true)
+    {
+        BeginDrawing();
+
+        if (IsKeyPressed(KEY_ESCAPE))
+        {
+            EndDrawing();
             return 0;
         }
 
-        BeginDrawing();
-        ClearBackground((Color){0xee, 0xee, 0xef});
+        //ClearBackground((Color){0xee, 0xee, 0xef});
 
         DrawRectangleRec(pos, INTER_BG_COLOR);
         DrawTextEx(g_font, title, (Vector2){pos.x, pos.y}, g_font_size, g_font_spacing, INTER_TEXT_COLOR);
         DrawTextEx(g_font, message, (Vector2){pos.x, pos.y + g_font_size}, g_font_size, g_font_spacing, INTER_TEXT_COLOR);
+
+        for (size_t i = 0; i < btnidx; i++)
+        {
+            int len = strlen(btn_txt[i]);
+            Vector2 sz = osfd_MeasureTextEx2(btn_txt[i], len);
+
+            if (osfd_TextButton(
+                    btn_txt[i],
+                    pos.x + pos.width - sz.x,
+                    (pos.y + g_font_size + g_font_size) + (i * g_font_size),
+                    sz.x) //
+            )
+            {
+                EndDrawing();
+                return i + 1;
+            }
+        }
 
         EndDrawing();
     }
