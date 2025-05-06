@@ -33,15 +33,8 @@ int PopUp(const char *title, const char *message, const char *buttons)
     int charidx = 0;
 
     const char *cur = buttons;
-    char c;
 
-    do
-    {
-        c = cur;
-        putchar(c);
-        
-        c += 1;
-    } while (c != NULL);
+
 
     while (!WindowShouldClose())
     {
