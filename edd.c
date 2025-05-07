@@ -430,7 +430,7 @@ void SaveOpenFile()
 
 int main(int argc, char *argv[])
 {
-  SetConfigFlags(FLAG_WINDOW_RESIZABLE | FLAG_WINDOW_HIGHDPI | FLAG_MSAA_4X_HINT | FLAG_VSYNC_HINT);
+  SetConfigFlags(FLAG_WINDOW_RESIZABLE | FLAG_MSAA_4X_HINT | FLAG_VSYNC_HINT);
   InitWindow(800, 600, "FCON");
   SetTargetFPS(60);
 
@@ -740,7 +740,7 @@ int main(int argc, char *argv[])
     { // statusbar rendering
       int status_y = GetScreenHeight() - g_font_size;
       DrawRectangle(0, status_y, GetScreenWidth(), g_font_size, (Color){0xd8, 0xd4, 0xc4, 0xff});
-      // DrawTextCodepoint(g_font, '~' + 2, (Vector2){10, status_y}, g_font_size, BLACK);
+      // DrawTextCodepoint(g_font, '~' + 11, (Vector2){10, status_y}, g_font_size, BLACK);
       DrawTextEx(g_font, TextFormat("Font Size %.0f", g_font_size), (Vector2){10, status_y}, g_font_size, g_font_spacing, BLACK);
     }
 
