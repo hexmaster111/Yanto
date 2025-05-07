@@ -44,7 +44,7 @@ int main(int argc, char *argv[])
 
             ch += 1;
 
-            if(ch == '~') goto DONE;
+            if(ch == 255) goto DONE; // by default, raylib can only handle about this many
         }
     }
 
