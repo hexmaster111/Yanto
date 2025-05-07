@@ -8,7 +8,7 @@
 #define FNT_WIDTH 16
 #define FNT_HEIGHT 32
 
-#define BG_COLOR BLACK
+#define BG_COLOR BLANK
 #define FG_COLOR WHITE
 #define KY_COLOR MAGENTA
 
