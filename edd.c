@@ -28,9 +28,11 @@ float g_font_size, g_font_spacing;
 
 struct Line
 {
+  char *color;
   char *base;
   size_t len, cap;
 } *g_lines;
+
 size_t g_lines_count;
 
 int g_topline;
@@ -48,10 +50,8 @@ Camera2D g_x_scroll_view = {.zoom = 1}; // used to scroll left and right
 void GrowString(struct Line *l)
 {
   size_t new_cap = (l->cap + 1) * 2;
-
-  char *new = realloc(l->base, new_cap);
-
-  l->base = new;
+  l->base = realloc(l->base, new_cap);
+  l->color = realloc(l->color, new_cap);
   l->cap = new_cap;
 }
 
@@ -60,9 +60,57 @@ void AppendLine()
   g_lines = realloc(g_lines, sizeof(struct Line) * (g_lines_count + 1));
   printf("%zu\n", g_lines_count);
   g_lines[g_lines_count].base = 0;
+  g_lines[g_lines_count].color = 0;
   g_lines[g_lines_count].cap = 0;
   g_lines[g_lines_count].len = 0;
   g_lines_count += 1;
+}
+
+enum
+{
+  C_Black = 0,
+  C_Green = 1,
+  C_Blue = 2,
+  C_Red = 3,
+};
+
+const char *c_preproc_words[] = {
+    "define", "ifdef", "undef", "include", "ifndef", "else", "elif", "endif", "if", NULL};
+
+const char *c_keywords[] = {
+    "void", "int", "unsigned", "char", "long", "static",
+    "const", "NULL", "sizeof", "malloc", "free", "if", "typedef", "else", "register", "for",
+    "while", "switch", "case", "continue", "break", "return", "struct", "union", "enum", "do",
+    NULL};
+
+bool ReadWordFromLine(
+    char *line, size_t linelen,     // line we are reading
+    char *buffer, size_t bufferlen, // buffer we can write to
+    size_t *pos                     // where in the line we are (for itteration)
+)
+{
+  memset(buffer, 0, bufferlen);
+}
+
+void DoSyntaxHighlighting()
+{
+  if (!g_lines)
+    return;
+
+  for (size_t i = 0; i < g_lines_count; i++)
+  {
+    char buff[1024] = {0};
+    struct Line l = g_lines[i];
+
+    memset(l.color, 0, l.cap);
+
+    size_t pos = 0;
+
+    while (ReadWordFromLine(l.base, l.len, buff, sizeof(buff), &pos))
+    {
+      printf("Word: %s\n", buff);
+    }
+  }
 }
 
 void InsertChar(char *str, size_t str_len, char ch, int pos)
@@ -293,6 +341,7 @@ void LoadTextFile(const char *filepath)
     char *line = lines[i];
     g_lines[i].len = g_lines[i].cap = strlen(line);
     g_lines[i].base = line;
+    g_lines[i].color = malloc(strlen(line));
   }
 
   SetWindowTitle(TextFormat("%s - FCON", GetFileName(filepath)));
@@ -436,12 +485,9 @@ int main(int argc, char *argv[])
 
   SetExitKey(KEY_NULL);
 
-  // Image img = LoadImage("fonts/romulus.png");
   Image img = LoadImage("fonts/font_8_16.png");
   g_font = LoadFontFromImage(img, MAGENTA, '!');
   UnloadImage(img);
-
-  // g_font = LoadFontEx("fonts/TerminusTTF-4.49.3.ttf", 14, NULL, 0);
 
   TraceLog(LOG_INFO, "Loaded font with %d Glyphs", g_font.glyphCount);
 
@@ -463,6 +509,7 @@ int main(int argc, char *argv[])
   if (argc == 2)
   {
     LoadTextFile(argv[1]);
+    DoSyntaxHighlighting();
   }
   else
   {
@@ -678,6 +725,7 @@ int main(int argc, char *argv[])
       }
 
       int c;
+      bool anything_entered = false;
       do
       {
         c = GetCharPressed();
@@ -685,8 +733,14 @@ int main(int argc, char *argv[])
           break;
 
         InsertCharAtCurrsor(c);
+        anything_entered = true;
 
       } while (c);
+
+      if (anything_entered)
+      {
+        DoSyntaxHighlighting();
+      }
     }
 
     if (0 > g_topline)
@@ -711,8 +765,7 @@ int main(int argc, char *argv[])
     { // Text Rendering
       for (size_t i = g_topline; i < (g_screen_line_count + g_topline); i++)
       {
-        FDrawText(TextFormat("%*d", LINE_NUMBERS_SUPPORTED, i + 1), 3,
-                  (i - g_topline) * g_font_size, BLACK);
+        FDrawText(TextFormat("%*d", LINE_NUMBERS_SUPPORTED, i + 1), 3, (i - g_topline) * g_font_size, BLACK);
 
         if (i == g_cursor_line)
         {
@@ -723,9 +776,11 @@ int main(int argc, char *argv[])
 
         if (i >= g_lines_count)
           break;
+
         FDrawText(TextFormat("%.*s", g_lines[i].len, g_lines[i].base),
                   g_font_size * LINE_NUMBERS_SUPPORTED - 1,
                   (i - g_topline) * g_font_size, BLACK);
+        //
       }
     }
 

@@ -28,7 +28,14 @@
         "string": "c",
         "memory": "c",
         "new": "c",
-        "stdint.h": "c"
+        "stdint.h": "c",
+        "deque": "c",
+        "unordered_map": "c",
+        "vector": "c",
+        "ios": "c",
+        "ostream": "c",
+        "streambuf": "c",
+        "system_error": "c"
     },
     "C_Cpp.errorSquiggles": "disabled"
 }
