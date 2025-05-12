@@ -3,10 +3,15 @@
 #include <string.h>
 
 #include "spleen-16x32.c"
+#include "spleen-8x16.c"
+
+// #define SPLEEN_8X16_FRAME_COUNT 965
+// #define SPLEEN_8X16_FRAME_WIDTH 8
+// #define SPLEEN_8X16_FRAME_HEIGHT 16
 
 #define FNT_COUNT 965
-#define FNT_WIDTH 16
-#define FNT_HEIGHT 32
+#define FNT_WIDTH 8
+#define FNT_HEIGHT 16
 
 #define BG_COLOR BLANK
 #define FG_COLOR WHITE
@@ -31,7 +36,7 @@ int main(int argc, char *argv[])
             int py = (r * FNT_HEIGHT) + r + 1;
 
             uint32_t frame[FNT_WIDTH * FNT_HEIGHT];
-            memmove(frame, spleen_16x32_data[ch], sizeof(frame));
+            memmove(frame, spleen_8x16_data[ch], sizeof(frame));
 
             // ImageDrawRectangle(&target, px, py, FNT_WIDTH, FNT_HEIGHT, WHITE);
             for (size_t f = 0; f < FNT_WIDTH * FNT_HEIGHT; f++)

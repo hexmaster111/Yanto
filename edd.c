@@ -13,9 +13,9 @@
 
 #define TAB_SIZE 4
 #define LINE_NUMBERS_SUPPORTED 3
-#define DEFAULT_FONT_SIZE 12
+#define DEFAULT_FONT_SIZE 16
 #define INIT_LINE_COUNT 5
-#define BACKGROUND_COLOR ((Color){0xfd, 0xf6, 0xe3, 0xFF})
+#define BACKGROUND_COLOR ((Color){0xfd, 0xf6, 0xe3, 0xff})
 
 Vector2 MeasureTextEx2(const char *text, size_t text_len);
 void OnCurrsorLineChanged();
@@ -437,7 +437,7 @@ int main(int argc, char *argv[])
   SetExitKey(KEY_NULL);
 
   // Image img = LoadImage("fonts/romulus.png");
-  Image img = LoadImage("fonts/font.png");
+  Image img = LoadImage("fonts/font_8_16.png");
   g_font = LoadFontFromImage(img, MAGENTA, '!');
   UnloadImage(img);
 
