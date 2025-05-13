@@ -16,6 +16,7 @@
 #define DEFAULT_FONT_SIZE 16
 #define INIT_LINE_COUNT 5
 #define BACKGROUND_COLOR ((Color){0xfd, 0xf6, 0xe3, 0xff})
+#define rgb(COLORR, COLORG, COLORB) ((Color){COLORR, COLORG, COLORB, 0xff})
 
 Vector2 MeasureTextEx2(const char *text, size_t text_len);
 void OnCurrsorLineChanged();
@@ -69,27 +70,84 @@ void AppendLine()
 enum
 {
   C_Black = 0,
-  C_Green = 1,
+  C_Brick = 1,
   C_Blue = 2,
-  C_Red = 3,
+  C_Green = 3,
+  C_Purple = 4,
 };
 
 const char *c_preproc_words[] = {
-    "define", "ifdef", "undef", "include", "ifndef", "else", "elif", "endif", "if", NULL};
-
-const char *c_keywords[] = {
-    "void", "int", "unsigned", "char", "long", "static",
-    "const", "NULL", "sizeof", "malloc", "free", "if", "typedef", "else", "register", "for",
-    "while", "switch", "case", "continue", "break", "return", "struct", "union", "enum", "do",
+    "#define", "#ifdef", "#undef", "#include", "#ifndef", "#elif", "#endif", "#if", "#error", "#pragma",
     NULL};
 
-bool ReadWordFromLine(
-    char *line, size_t linelen,     // line we are reading
-    char *buffer, size_t bufferlen, // buffer we can write to
-    size_t *pos                     // where in the line we are (for itteration)
+const char *c_types[] = {
+    "void", "int", "unsigned", "char", "long", "size_t", "bool",
+    NULL};
+
+const char *c_keywords[] = {
+    "static", "const", "NULL", "sizeof", "malloc", "free", "typedef", "register", "struct", "union",
+    "enum",
+    NULL};
+
+const char *c_flowcontrol[] = {
+    "while", "switch", "case", "continue", "do", "break", "return", "if", "else", "for", "goto",
+    NULL};
+
+const char *c_comment_keywords[] = {
+  "TODO:", "WARNING:",
+  NULL
+};
+
+const char c_word_sepprators[] = {
+    ' ', '(', ')', ',', '{', '}', '*', '&', ';',
+    '\0'};
+
+bool CReadWordFromLine(
+    const char * sepprators,
+    char *line, size_t linelen,   // line we are reading
+    size_t *wstart, size_t *wend, // output word locations
+    size_t *pos                   // where in the line we are (for itteration)
 )
 {
-  memset(buffer, 0, bufferlen);
+  *wstart = 0, *wend = 0;
+
+  if (line[*pos] == '\0')
+    return false;
+
+  while (isspace(line[*pos]) && line[*pos] != '\0')
+    *pos += 1; // skips whitespace
+
+  size_t start = *pos;
+
+  while (line[*pos] != '\0')
+  {
+    char ch = sepprators[0];
+    bool hitsep = false;
+
+    for (size_t i = 0; ch != '\0'; i++)
+    {
+      ch = sepprators[i];
+      if (line[*pos] == ch)
+      {
+        goto SEARCH_DONE;
+      }
+    }
+
+    *pos += 1;
+  }
+
+SEARCH_DONE:
+
+  // SECUITY: missing buffer overflow check
+  // memcpy(buffer, line + start, *pos - start);
+
+  *wstart = start;
+  *wend = *pos;
+
+  if (line[*pos] != '\0') // skip what we hit
+    *pos += 1;
+
+  return true;
 }
 
 void DoSyntaxHighlighting()
@@ -99,16 +157,120 @@ void DoSyntaxHighlighting()
 
   for (size_t i = 0; i < g_lines_count; i++)
   {
-    char buff[1024] = {0};
+
     struct Line l = g_lines[i];
+
+    if (!l.base || !l.color)
+      continue;
 
     memset(l.color, 0, l.cap);
 
-    size_t pos = 0;
+    size_t pos = 0, wstart = 0, wend = 0;
 
-    while (ReadWordFromLine(l.base, l.len, buff, sizeof(buff), &pos))
+    while (CReadWordFromLine(c_word_sepprators ,l.base, l.len, &wstart, &wend, &pos))
     {
-      printf("Word: %s\n", buff);
+      size_t wordlen = wend - wstart;
+      const char *kw = NULL;
+      int kw_idx = 0;
+      for (;;)
+      {
+        kw = c_keywords[kw_idx];
+        kw_idx += 1;
+
+        if (!kw)
+          break;
+
+        size_t kwlen = strlen(kw);
+
+        if (kwlen != wordlen)
+          continue;
+
+        if (memcmp(kw, l.base + wstart, kwlen) == 0)
+        {
+          memset(l.color + wstart, C_Blue, kwlen);
+          goto LINE_DONE;
+        }
+      }
+
+      kw = NULL;
+      kw_idx = 0;
+      for (;;)
+      {
+        kw = c_types[kw_idx];
+        kw_idx += 1;
+
+        if (!kw)
+          break;
+
+        size_t kwlen = strlen(kw);
+
+        if (kwlen != wordlen)
+          continue;
+
+        if (memcmp(kw, l.base + wstart, kwlen) == 0)
+        {
+          memset(l.color + wstart, C_Brick, kwlen);
+          goto LINE_DONE;
+        }
+      }
+
+      kw = NULL;
+      kw_idx = 0;
+      for (;;)
+      {
+        kw = c_preproc_words[kw_idx];
+        kw_idx += 1;
+
+        if (!kw)
+          break;
+
+        size_t kwlen = strlen(kw);
+
+        if (kwlen != wordlen)
+          continue;
+
+        if (memcmp(kw, l.base + wstart, kwlen) == 0)
+        {
+          memset(l.color + wstart, C_Purple, kwlen);
+          goto LINE_DONE;
+        }
+      }
+
+      kw = NULL;
+      kw_idx = 0;
+      for (;;)
+      {
+        kw = c_flowcontrol[kw_idx];
+        kw_idx += 1;
+
+        if (!kw)
+          break;
+
+        size_t kwlen = strlen(kw);
+
+        if (kwlen != wordlen)
+          continue;
+
+        if (memcmp(kw, l.base + wstart, kwlen) == 0)
+        {
+          memset(l.color + wstart, C_Green, kwlen);
+          goto LINE_DONE;
+        }
+      }
+
+      // not quite what i want for syntax highlighing of string ands stuff. This 
+      // may need to be another highlighing step where we only look at string like things
+      // if(*(l.base+wstart) == '<' &&  *(l.base+wend-1) == '>'){
+      //   memset(l.color + wstart, C_Green, wend - wstart);
+      // }
+      // if(*(l.base+wstart) == '"' &&  *(l.base+wend-1) == '"'){
+      //   memset(l.color + wstart, C_Green, wend - wstart);
+      // }
+      // if(*(l.base+wstart) == '\'' &&  *(l.base+wend-1) == '\''){
+      //   memset(l.color + wstart, C_Green, wend - wstart);
+      // }
+
+    LINE_DONE:;
     }
   }
 }
@@ -346,6 +508,7 @@ void LoadTextFile(const char *filepath)
 
   SetWindowTitle(TextFormat("%s - FCON", GetFileName(filepath)));
   memcpy(g_open_file_path, filepath, strlen(filepath));
+  DoSyntaxHighlighting();
 }
 
 void OnResize() { g_screen_line_count = (GetScreenHeight() / g_font_size) - 1; /*for status*/ }
@@ -369,73 +532,6 @@ bool IsFileOpen()
     return false;
 
   return true;
-}
-
-void AskUserToPickWhereToSaveTo()
-{
-  while (GetCharPressed())
-    ; // get rid of all those keys in the buffer
-
-  char lbuf[sizeof(g_open_file_path)];
-  memset(lbuf, 0, sizeof(lbuf));
-
-  size_t lbufidx = 0;
-  bool rundialog = true;
-
-  while (rundialog & !WindowShouldClose())
-  {
-    int k = GetCharPressed();
-
-    while (k != 0)
-    {
-      if (isprint(k))
-      {
-        lbuf[lbufidx] = k;
-        lbufidx += 1;
-      }
-      else
-      {
-        printf("Unknown char #%d", k);
-      }
-
-      k = GetCharPressed();
-    }
-
-    if (IsKeyPressed(KEY_ENTER))
-    {
-      rundialog = false;
-      memcpy(g_open_file_path, lbuf, sizeof(lbuf));
-    }
-
-    if (IsKeyPressed(KEY_ESCAPE))
-    {
-      rundialog = false;
-    }
-
-    if (IsKeyPressed(KEY_BACKSPACE))
-    {
-      lbufidx -= 1;
-      if (0 > lbufidx)
-        lbufidx = 0;
-
-      lbuf[lbufidx] = '\0';
-    }
-
-    BeginDrawing();
-
-    const char *userinput = TextFormat("> %s", lbuf);
-
-    Vector2 inputsize = MeasureTextEx2(userinput, strlen(userinput));
-
-    FDrawText("Where should I save to?", GetScreenWidth() / 2, GetScreenHeight() / 2, BLACK);
-
-    DrawRectangle(GetScreenWidth() / 2, (GetScreenHeight() / 2) + g_font_size,
-                  inputsize.x * 1.5, g_font_size, BACKGROUND_COLOR);
-
-    FDrawText(userinput, GetScreenWidth() / 2, (GetScreenHeight() / 2) + g_font_size, BLACK);
-
-    EndDrawing();
-  }
 }
 
 void SaveOpenFile()
@@ -479,7 +575,7 @@ void SaveOpenFile()
 
 int main(int argc, char *argv[])
 {
-  SetConfigFlags(FLAG_WINDOW_RESIZABLE | FLAG_MSAA_4X_HINT | FLAG_VSYNC_HINT);
+  SetConfigFlags(FLAG_WINDOW_RESIZABLE); //| FLAG_MSAA_4X_HINT | FLAG_VSYNC_HINT);
   InitWindow(800, 600, "FCON");
   SetTargetFPS(60);
 
@@ -509,7 +605,6 @@ int main(int argc, char *argv[])
   if (argc == 2)
   {
     LoadTextFile(argv[1]);
-    DoSyntaxHighlighting();
   }
   else
   {
@@ -685,7 +780,7 @@ int main(int argc, char *argv[])
         g_x_scroll_view.offset.x = 0;
 
       if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT))
-      {
+      { // TODO: positions off a little in this mehtod....
         Vector2 pt = GetMousePosition();
 
         for (size_t i = g_topline; i < (g_screen_line_count + g_topline); i++)
@@ -726,6 +821,7 @@ int main(int argc, char *argv[])
 
       int c;
       bool anything_entered = false;
+
       do
       {
         c = GetCharPressed();
@@ -742,6 +838,10 @@ int main(int argc, char *argv[])
         DoSyntaxHighlighting();
       }
     }
+
+    // TODO: Here for debugging, this should only run when
+    // users enter/move things around in there file
+    DoSyntaxHighlighting();
 
     if (0 > g_topline)
       g_topline = 0;
@@ -765,6 +865,7 @@ int main(int argc, char *argv[])
     { // Text Rendering
       for (size_t i = g_topline; i < (g_screen_line_count + g_topline); i++)
       {
+
         FDrawText(TextFormat("%*d", LINE_NUMBERS_SUPPORTED, i + 1), 3, (i - g_topline) * g_font_size, BLACK);
 
         if (i == g_cursor_line)
@@ -777,20 +878,38 @@ int main(int argc, char *argv[])
         if (i >= g_lines_count)
           break;
 
-        FDrawText(TextFormat("%.*s", g_lines[i].len, g_lines[i].base),
-                  g_font_size * LINE_NUMBERS_SUPPORTED - 1,
-                  (i - g_topline) * g_font_size, BLACK);
-        //
+        for (size_t c = 0; c < g_lines[i].len; c++)
+        {
+          Color color = BLACK;
+
+          switch (g_lines[i].color[c])
+          {
+            // clang-format off
+            case C_Black: color = rgb(0, 0, 0);break;
+            case C_Blue:  color = rgb(0, 121, 241);break;
+            case C_Brick: color = rgb(203, 75, 22);break;
+            case C_Green: color = rgb(133, 153, 0);break;
+            case C_Purple:color = rgb(148, 6, 184); break;
+            // clang-format on
+          }
+
+          FDrawText(TextFormat("%c", g_lines[i].base[c]),
+                    g_font.recs[0].width * (LINE_NUMBERS_SUPPORTED + 1 + c),
+                    (i - g_topline) * g_font_size, color);
+        }
       }
     }
 
     { // currsor rendering
       struct Line *l = &g_lines[g_cursor_line];
-      Vector2 linelen = MeasureTextEx2(l->base, g_cursor_col);
-      linelen.x += g_font_size * LINE_NUMBERS_SUPPORTED - 1;
+      // Vector2 linelen = MeasureTextEx2(l->base, g_cursor_col);
+      float llx = g_font.recs[0].width * (LINE_NUMBERS_SUPPORTED + 1 + g_cursor_col);
       float cy = (g_cursor_line - g_topline) * g_font_size;
-      DrawLineEx((Vector2){linelen.x, cy}, (Vector2){linelen.x, cy + g_font_size}, 2, BLACK);
+      DrawLineEx((Vector2){llx, cy}, (Vector2){llx, cy + g_font_size}, 2, BLACK);
     }
+    
+    EndMode2D();
+
 
     { // statusbar rendering
       int status_y = GetScreenHeight() - g_font_size;
@@ -803,7 +922,6 @@ int main(int argc, char *argv[])
     //                     linelen.x),
     //          40, GetScreenHeight() - g_font_size * 4, g_font_size, PURPLE);
 
-    EndMode2D();
     EndDrawing();
   }
 
