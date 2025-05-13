@@ -74,6 +74,8 @@ enum
   C_Blue = 2,
   C_Green = 3,
   C_Purple = 4,
+  C_Gray = 5,
+  C_Teal = 6
 };
 
 const char *c_preproc_words[] = {
@@ -81,12 +83,12 @@ const char *c_preproc_words[] = {
     NULL};
 
 const char *c_types[] = {
-    "void", "int", "unsigned", "char", "long", "size_t", "bool",
+    "void", "int", "unsigned", "char", "long", "size_t", "bool", "float", "double",
     NULL};
 
 const char *c_keywords[] = {
     "static", "const", "NULL", "sizeof", "malloc", "free", "typedef", "register", "struct", "union",
-    "enum",
+    "enum", "extern",
     NULL};
 
 const char *c_flowcontrol[] = {
@@ -94,16 +96,19 @@ const char *c_flowcontrol[] = {
     NULL};
 
 const char *c_comment_keywords[] = {
-  "TODO:", "WARNING:",
-  NULL
-};
+    "TODO:", "WARNING:",
+    NULL};
 
 const char c_word_sepprators[] = {
     ' ', '(', ')', ',', '{', '}', '*', '&', ';',
     '\0'};
 
+const char c_string_sep[] = {
+    '"', '<', '>', '\'',
+    '\0'};
+
 bool CReadWordFromLine(
-    const char * sepprators,
+    const char *sepprators,
     char *line, size_t linelen,   // line we are reading
     size_t *wstart, size_t *wend, // output word locations
     size_t *pos                   // where in the line we are (for itteration)
@@ -167,7 +172,8 @@ void DoSyntaxHighlighting()
 
     size_t pos = 0, wstart = 0, wend = 0;
 
-    while (CReadWordFromLine(c_word_sepprators ,l.base, l.len, &wstart, &wend, &pos))
+    // handles keywords and lang words
+    while (CReadWordFromLine(c_word_sepprators, l.base, l.len, &wstart, &wend, &pos))
     {
       size_t wordlen = wend - wstart;
       const char *kw = NULL;
@@ -188,7 +194,7 @@ void DoSyntaxHighlighting()
         if (memcmp(kw, l.base + wstart, kwlen) == 0)
         {
           memset(l.color + wstart, C_Blue, kwlen);
-          goto LINE_DONE;
+          goto WORD_DONE;
         }
       }
 
@@ -210,7 +216,7 @@ void DoSyntaxHighlighting()
         if (memcmp(kw, l.base + wstart, kwlen) == 0)
         {
           memset(l.color + wstart, C_Brick, kwlen);
-          goto LINE_DONE;
+          goto WORD_DONE;
         }
       }
 
@@ -232,7 +238,7 @@ void DoSyntaxHighlighting()
         if (memcmp(kw, l.base + wstart, kwlen) == 0)
         {
           memset(l.color + wstart, C_Purple, kwlen);
-          goto LINE_DONE;
+          goto WORD_DONE;
         }
       }
 
@@ -254,11 +260,11 @@ void DoSyntaxHighlighting()
         if (memcmp(kw, l.base + wstart, kwlen) == 0)
         {
           memset(l.color + wstart, C_Green, kwlen);
-          goto LINE_DONE;
+          goto WORD_DONE;
         }
       }
 
-      // not quite what i want for syntax highlighing of string ands stuff. This 
+      // not quite what i want for syntax highlighing of string ands stuff. This
       // may need to be another highlighing step where we only look at string like things
       // if(*(l.base+wstart) == '<' &&  *(l.base+wend-1) == '>'){
       //   memset(l.color + wstart, C_Green, wend - wstart);
@@ -270,7 +276,42 @@ void DoSyntaxHighlighting()
       //   memset(l.color + wstart, C_Green, wend - wstart);
       // }
 
-    LINE_DONE:;
+    WORD_DONE:;
+    }
+
+    pos = wstart = wend = 0;
+
+    // handles string / char lits / imports
+    while (CReadWordFromLine(c_string_sep, l.base, l.len, &wstart, &wend, &pos))
+    {
+      size_t len = (wend - wstart) + 2;
+      const char *wrd = l.base + wstart - 1;
+      char cs = '\0';
+
+      int cs_idx = 0;
+      // printf("%.*s\n", len, wrd);
+      for (;;)
+      {
+        cs = c_string_sep[cs_idx];
+
+        cs_idx += 1;
+
+        if (!cs)
+          break;
+
+        if (cs != '<' && cs != '>' && *wrd == cs && *(wrd + len - 1) == cs)
+        {
+          memset(l.color + wstart - 1, C_Teal, len);
+          goto WORD_DONE_;
+        }
+        else if (*wrd == '<' && *(wrd + len - 1) == '>')
+        {
+          memset(l.color + wstart - 1, C_Teal, len);
+          goto WORD_DONE_;
+        }
+      }
+
+    WORD_DONE_:
     }
   }
 }
@@ -839,10 +880,6 @@ int main(int argc, char *argv[])
       }
     }
 
-    // TODO: Here for debugging, this should only run when
-    // users enter/move things around in there file
-    DoSyntaxHighlighting();
-
     if (0 > g_topline)
       g_topline = 0;
 
@@ -890,6 +927,8 @@ int main(int argc, char *argv[])
             case C_Brick: color = rgb(203, 75, 22);break;
             case C_Green: color = rgb(133, 153, 0);break;
             case C_Purple:color = rgb(148, 6, 184); break;
+            case C_Gray:color   = rgb(156, 156, 156); break;
+            case C_Teal:color   = rgb(42, 161, 152); break;
             // clang-format on
           }
 
@@ -907,9 +946,8 @@ int main(int argc, char *argv[])
       float cy = (g_cursor_line - g_topline) * g_font_size;
       DrawLineEx((Vector2){llx, cy}, (Vector2){llx, cy + g_font_size}, 2, BLACK);
     }
-    
-    EndMode2D();
 
+    EndMode2D();
 
     { // statusbar rendering
       int status_y = GetScreenHeight() - g_font_size;

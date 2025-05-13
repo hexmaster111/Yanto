@@ -1,15 +1,33 @@
+// This comment is here to help me test comments
+// turkies are known for using comments
 
-int 
- int 
-  int 
-    int 
+/*This comment is going to be HUGE
+this is the best comment
+#include <SomethingSpicy.h>
+Everybody loves this comment*/
+
+/* and this one is small but big */
 
 
-void
- void 
-  void 
-   void 
-    void 
+#include <SomethingSpicy.h>
+#include "test header with space.h"
 
+
+extern double 
+const char 
+struct{
+    float  f;
+    double d;
+} s;
+
+int main(int argc, char *argv[]) {
+    
+}
+
+const char *something = "I am a string!";
+int something = 0; // I am a comment!
+
+char c = 'c';
+char z = '\0';
 
 
