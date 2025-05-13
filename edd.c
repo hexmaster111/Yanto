@@ -142,10 +142,6 @@ bool CReadWordFromLine(
   }
 
 SEARCH_DONE:
-
-  // SECUITY: missing buffer overflow check
-  // memcpy(buffer, line + start, *pos - start);
-
   *wstart = start;
   *wend = *pos;
 
@@ -313,6 +309,9 @@ void DoSyntaxHighlighting()
 
     WORD_DONE_:
     }
+  
+    
+    
   }
 }
 
