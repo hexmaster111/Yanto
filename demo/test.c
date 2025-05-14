@@ -22,6 +22,10 @@ struct{
     double d;
 } s;
 
+
+// @brief Entrypoint
+// @param argc count of argv
+// @param argv arguments passed into this program
 int main(int argc, char *argv[]) {
 
 }
@@ -33,6 +37,7 @@ char c = 'c';
 char z = '\0';
 
 int something = 10;
+
 
 
 

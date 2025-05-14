@@ -67,6 +67,13 @@ char g_open_file_path[1024] = {0};
 
 bool g_file_changed = false;
 
+enum Syntax
+{
+  S_PlainText,
+  S_C,
+  S_Verilog
+} g_open_file_syntax;
+
 bool HasUnsavedChanges() { return g_file_changed; }
 
 Camera2D g_x_scroll_view = {.zoom = 1}; // used to scroll left and right
@@ -90,300 +97,17 @@ void AppendLine()
   g_lines_count += 1;
 }
 
-const char *c_preproc_words[] = {
-    "#define", "#ifdef", "#undef", "#include", "#ifndef", "#elif", "#endif", "#if", "#error", "#pragma",
-    NULL};
+#include "c_syntax_hl.c"
 
-const char *c_types[] = {
-    "void", "int", "unsigned", "char", "long", "size_t", "bool", "float", "double",
-    NULL};
-
-const char *c_keywords[] = {
-    "static", "const", "NULL", "sizeof", "malloc", "free", "typedef", "register", "struct", "union",
-    "enum", "extern",
-    NULL};
-
-const char *c_flowcontrol[] = {
-    "while", "switch", "case", "continue", "do", "break", "return", "if", "else", "for", "goto",
-    NULL};
-
-const char *c_comment_keywords[] = {
-    "TODO:", "WARNING:", "NOTICE:",
-    NULL};
-
-const char c_word_sepprators[] = {
-    ' ', '(', ')', ',', '{', '}', '*', '&', ';',
-    '\0'};
-
-const char c_string_sep[] = {
-    '"', '<', '>', '\'',
-    '\0'};
-
-const char c_comment_word_sep[] = {
-    ' ',
-    '\0'};
-
-bool CReadWordFromLine(
-    const char *sepprators,
-    char *line, size_t linelen,   // line we are reading
-    size_t *wstart, size_t *wend, // output word locations
-    size_t *pos                   // where in the line we are (for itteration)
-)
+void DoTxtSyntaxHighlighting()
 {
-  *wstart = 0, *wend = 0;
-
-  if (line[*pos] == '\0')
-    return false;
-
-  while (isspace(line[*pos]) && line[*pos] != '\0')
-    *pos += 1; // skips whitespace
-
-  size_t start = *pos;
-
-  while (line[*pos] != '\0')
-  {
-    char ch = sepprators[0];
-    bool hitsep = false;
-
-    for (size_t i = 0; ch != '\0'; i++)
-    {
-      ch = sepprators[i];
-      if (line[*pos] == ch)
-      {
-        goto SEARCH_DONE;
-      }
-    }
-
-    *pos += 1;
-  }
-
-SEARCH_DONE:
-  *wstart = start;
-  *wend = *pos;
-
-  if (line[*pos] != '\0') // skip what we hit
-    *pos += 1;
-
-  return true;
-}
-
-void DoCSyntaxHighlighing()
-{
-  bool in_multiline_comment = false;
-
-  // if syntax highlighing is too taxing, perhaps only re-computing hl for visable lines is in order
-  // for (size_t i = g_topline; i < (g_screen_line_count + g_topline); i++)
   for (size_t i = 0; i < g_lines_count; i++)
   {
-
     struct Line l = g_lines[i];
 
-    if (!l.base || !l.style)
-      continue; // this line is empty
-
-    size_t pos = 0;
-    char last = ' ';
-    memset(l.style, COLOR_DEFAULT, l.cap);
-    size_t wstart = 0, wend = 0;
-    // handles keywords and lang words
-    while (CReadWordFromLine(c_word_sepprators, l.base, l.len, &wstart, &wend, &pos))
+    if (l.style)
     {
-      size_t wordlen = wend - wstart;
-      const char *kw = NULL;
-      int kw_idx = 0;
-      for (;;)
-      {
-        kw = c_keywords[kw_idx];
-        kw_idx += 1;
-
-        if (!kw)
-          break;
-
-        size_t kwlen = strlen(kw);
-
-        if (kwlen != wordlen)
-          continue;
-
-        if (memcmp(kw, l.base + wstart, kwlen) == 0)
-        {
-          memset(l.style + wstart, COLOR_KEYWORD, kwlen);
-          goto WORD_DONE;
-        }
-      }
-
-      kw = NULL;
-      kw_idx = 0;
-      for (;;)
-      {
-        kw = c_types[kw_idx];
-        kw_idx += 1;
-
-        if (!kw)
-          break;
-
-        size_t kwlen = strlen(kw);
-
-        if (kwlen != wordlen)
-          continue;
-
-        if (memcmp(kw, l.base + wstart, kwlen) == 0)
-        {
-          memset(l.style + wstart, COLOR_TYPE, kwlen);
-          goto WORD_DONE;
-        }
-      }
-
-      kw = NULL;
-      kw_idx = 0;
-      for (;;)
-      {
-        kw = c_preproc_words[kw_idx];
-        kw_idx += 1;
-
-        if (!kw)
-          break;
-
-        size_t kwlen = strlen(kw);
-
-        if (kwlen != wordlen)
-          continue;
-
-        if (memcmp(kw, l.base + wstart, kwlen) == 0)
-        {
-          memset(l.style + wstart, COLOR_PREPROC, kwlen);
-          goto WORD_DONE;
-        }
-      }
-
-      kw = NULL;
-      kw_idx = 0;
-      for (;;)
-      {
-        kw = c_flowcontrol[kw_idx];
-        kw_idx += 1;
-
-        if (!kw)
-          break;
-
-        size_t kwlen = strlen(kw);
-
-        if (kwlen != wordlen)
-          continue;
-
-        if (memcmp(kw, l.base + wstart, kwlen) == 0)
-        {
-          memset(l.style + wstart, COLOR_FLOWCTRL, kwlen);
-          goto WORD_DONE;
-        }
-      }
-
-    WORD_DONE:;
-    }
-
-    pos = wstart = wend = 0;
-
-    // handles string / char lits / imports
-    while (CReadWordFromLine(c_string_sep, l.base, l.len, &wstart, &wend, &pos))
-    {
-      size_t len = (wend - wstart) + 2;
-      const char *wrd = l.base + wstart - 1;
-      char cs = '\0';
-
-      int cs_idx = 0;
-      // printf("%.*s\n", len, wrd);
-      for (;;)
-      {
-        cs = c_string_sep[cs_idx];
-
-        cs_idx += 1;
-
-        if (!cs)
-          break;
-
-        if (cs != '<' && cs != '>' && *wrd == cs && *(wrd + len - 1) == cs)
-        {
-          memset(l.style + wstart - 1, COLOR_STRCHAR, len);
-          goto WORD_DONE_;
-        }
-        else if (*wrd == '<' && *(wrd + len - 1) == '>')
-        {
-          memset(l.style + wstart - 1, COLOR_STRCHAR, len);
-          goto WORD_DONE_;
-        }
-      }
-
-    WORD_DONE_:
-    }
-
-    last = ' ';
-    // single line // comments
-    for (size_t j = 0; j < l.len; j++)
-    {
-      char now = l.base[j];
-
-      if (now == '/' && last == '/')
-      {
-        // comment stuff to end of line....
-        size_t pos_ = j - 1;
-        memset(l.style + pos_, COLOR_COMMENT, l.len - pos_);
-        break;
-      }
-
-      last = now;
-    }
-
-    // multiline comment handling
-    last = ' ';
-    for (size_t j = 0; j < l.len; j++)
-    {
-      char now = l.base[j];
-
-      if (last == '/' && now == '*')
-      {
-        in_multiline_comment = true;
-        l.style[j - 1] = COLOR_COMMENT;
-      }
-
-      if (last == '*' && now == '/')
-      {
-        in_multiline_comment = false;
-        l.style[j] = COLOR_COMMENT;
-      }
-
-      if (in_multiline_comment)
-      {
-        l.style[j] = COLOR_COMMENT;
-      }
-
-      last = now;
-    }
-
-    // highlighting within the comment handling
-    pos = wstart = wend = 0;
-
-    while (CReadWordFromLine(c_comment_word_sep, l.base, l.len, &wstart, &wend, &pos))
-    {
-      size_t wordlen = wend - wstart;
-      const char *kw = NULL;
-      int kw_idx = 0;
-      for (;;)
-      {
-        kw = c_comment_keywords[kw_idx];
-        kw_idx += 1;
-
-        if (!kw)
-          break;
-
-        size_t kwlen = strlen(kw);
-
-        if (kwlen != wordlen)
-          continue;
-
-        if (memcmp(kw, l.base + wstart, kwlen) == 0)
-        {
-          memset(l.style + wstart, COLOR_COMMENT_NOTICE, kwlen);
-        }
-      }
+      memset(l.style, C_Black, l.len);
     }
   }
 }
@@ -393,7 +117,14 @@ void DoSyntaxHighlighting()
   if (!g_lines)
     return;
 
-  DoCSyntaxHighlighing();
+  switch (g_open_file_syntax)
+  {
+    // clang-format off
+      case S_C: DoCSyntaxHighlighing(); break;
+      case S_Verilog: break;
+      case S_PlainText: DoTxtSyntaxHighlighting(); break;
+    // clang-format on
+  }
 }
 
 void InsertChar(char *str, size_t str_len, char ch, int pos)
@@ -608,7 +339,7 @@ void FDrawText(const char *text, float x, float y, Color color)
   DrawTextEx(g_font, text, (Vector2){x, y}, g_font_size, 1, color);
 }
 
-void LoadTextFile(const char *filepath)
+void OpenTextFile(const char *filepath)
 {
   g_cursor_line = 0;
   g_cursor_col = 0;
@@ -635,6 +366,21 @@ void LoadTextFile(const char *filepath)
 
   SetWindowTitle(TextFormat("%s - FCON", GetFileName(filepath)));
   memcpy(g_open_file_path, filepath, strlen(filepath));
+
+  
+  g_open_file_syntax = S_PlainText;
+  
+  const char *ext = GetFileExtension(GetFileName(filepath));
+  
+  if (strcmp(ext, ".c") == 0)
+    g_open_file_syntax = S_C;
+  else if (strcmp(ext, ".C") == 0)
+    g_open_file_syntax = S_C;
+  else if (strcmp(ext, ".h") == 0)
+    g_open_file_syntax = S_C;
+  else if (strcmp(ext, ".H") == 0)
+    g_open_file_syntax = S_C;
+
   DoSyntaxHighlighting();
 }
 
@@ -731,7 +477,7 @@ int main(int argc, char *argv[])
 
   if (argc == 2)
   {
-    LoadTextFile(argv[1]);
+    OpenTextFile(argv[1]);
   }
   else
   {
@@ -806,7 +552,7 @@ int main(int argc, char *argv[])
         printf("opening : %s\n", newPath);
         if (newPath)
         {
-          LoadTextFile(newPath);
+          OpenTextFile(newPath);
         }
       }
       else if (IsKeyPressed(KEY_S))
