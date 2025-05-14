@@ -18,6 +18,28 @@
 #define BACKGROUND_COLOR ((Color){0xfd, 0xf6, 0xe3, 0xff})
 #define rgb(COLORR, COLORG, COLORB) ((Color){COLORR, COLORG, COLORB, 0xff})
 
+#define COLOR_COMMENT (C_Gray)
+#define COLOR_TYPE (C_Brick)
+#define COLOR_PREPROC (C_Purple)
+#define COLOR_FLOWCTRL (C_Green)
+#define COLOR_STRCHAR (C_Teal)
+#define COLOR_MODIFYER (C_Blue)
+#define COLOR_COMMENT_NOTICE (C_Red)
+#define COLOR_DEFAULT (C_Black)
+#define COLOR_KEYWORD (C_Blue)
+
+enum
+{
+  C_Black = 0,
+  C_Brick = 1,
+  C_Blue = 2,
+  C_Green = 3,
+  C_Purple = 4,
+  C_Gray = 5,
+  C_Teal = 6,
+  C_Red = 7
+};
+
 Vector2 MeasureTextEx2(const char *text, size_t text_len);
 void OnCurrsorLineChanged();
 
@@ -67,17 +89,6 @@ void AppendLine()
   g_lines_count += 1;
 }
 
-enum
-{
-  C_Black = 0,
-  C_Brick = 1,
-  C_Blue = 2,
-  C_Green = 3,
-  C_Purple = 4,
-  C_Gray = 5,
-  C_Teal = 6
-};
-
 const char *c_preproc_words[] = {
     "#define", "#ifdef", "#undef", "#include", "#ifndef", "#elif", "#endif", "#if", "#error", "#pragma",
     NULL};
@@ -96,7 +107,7 @@ const char *c_flowcontrol[] = {
     NULL};
 
 const char *c_comment_keywords[] = {
-    "TODO:", "WARNING:",
+    "TODO:", "WARNING:", "NOTICE:",
     NULL};
 
 const char c_word_sepprators[] = {
@@ -105,6 +116,10 @@ const char c_word_sepprators[] = {
 
 const char c_string_sep[] = {
     '"', '<', '>', '\'',
+    '\0'};
+
+const char c_comment_word_sep[] = {
+    ' ',
     '\0'};
 
 bool CReadWordFromLine(
@@ -156,18 +171,20 @@ void DoSyntaxHighlighting()
   if (!g_lines)
     return;
 
+  bool in_multiline_comment = false;
+
   for (size_t i = 0; i < g_lines_count; i++)
   {
 
     struct Line l = g_lines[i];
 
     if (!l.base || !l.color)
-      continue;
+      continue; // this line is empty
 
-    memset(l.color, 0, l.cap);
-
-    size_t pos = 0, wstart = 0, wend = 0;
-
+    size_t pos = 0;
+    char last = ' ';
+    memset(l.color, COLOR_DEFAULT, l.cap);
+    size_t wstart = 0, wend = 0;
     // handles keywords and lang words
     while (CReadWordFromLine(c_word_sepprators, l.base, l.len, &wstart, &wend, &pos))
     {
@@ -189,7 +206,7 @@ void DoSyntaxHighlighting()
 
         if (memcmp(kw, l.base + wstart, kwlen) == 0)
         {
-          memset(l.color + wstart, C_Blue, kwlen);
+          memset(l.color + wstart, COLOR_KEYWORD, kwlen);
           goto WORD_DONE;
         }
       }
@@ -211,7 +228,7 @@ void DoSyntaxHighlighting()
 
         if (memcmp(kw, l.base + wstart, kwlen) == 0)
         {
-          memset(l.color + wstart, C_Brick, kwlen);
+          memset(l.color + wstart, COLOR_TYPE, kwlen);
           goto WORD_DONE;
         }
       }
@@ -233,7 +250,7 @@ void DoSyntaxHighlighting()
 
         if (memcmp(kw, l.base + wstart, kwlen) == 0)
         {
-          memset(l.color + wstart, C_Purple, kwlen);
+          memset(l.color + wstart, COLOR_PREPROC, kwlen);
           goto WORD_DONE;
         }
       }
@@ -255,22 +272,10 @@ void DoSyntaxHighlighting()
 
         if (memcmp(kw, l.base + wstart, kwlen) == 0)
         {
-          memset(l.color + wstart, C_Green, kwlen);
+          memset(l.color + wstart, COLOR_FLOWCTRL, kwlen);
           goto WORD_DONE;
         }
       }
-
-      // not quite what i want for syntax highlighing of string ands stuff. This
-      // may need to be another highlighing step where we only look at string like things
-      // if(*(l.base+wstart) == '<' &&  *(l.base+wend-1) == '>'){
-      //   memset(l.color + wstart, C_Green, wend - wstart);
-      // }
-      // if(*(l.base+wstart) == '"' &&  *(l.base+wend-1) == '"'){
-      //   memset(l.color + wstart, C_Green, wend - wstart);
-      // }
-      // if(*(l.base+wstart) == '\'' &&  *(l.base+wend-1) == '\''){
-      //   memset(l.color + wstart, C_Green, wend - wstart);
-      // }
 
     WORD_DONE:;
     }
@@ -297,21 +302,92 @@ void DoSyntaxHighlighting()
 
         if (cs != '<' && cs != '>' && *wrd == cs && *(wrd + len - 1) == cs)
         {
-          memset(l.color + wstart - 1, C_Teal, len);
+          memset(l.color + wstart - 1, COLOR_STRCHAR, len);
           goto WORD_DONE_;
         }
         else if (*wrd == '<' && *(wrd + len - 1) == '>')
         {
-          memset(l.color + wstart - 1, C_Teal, len);
+          memset(l.color + wstart - 1, COLOR_STRCHAR, len);
           goto WORD_DONE_;
         }
       }
 
     WORD_DONE_:
     }
-  
-    
-    
+
+    last = ' ';
+    // single line // comments
+    for (size_t j = 0; j < l.len; j++)
+    {
+      char now = l.base[j];
+
+      if (now == '/' && last == '/')
+      {
+        // comment stuff to end of line....
+        size_t pos_ = j - 1;
+        memset(l.color + pos_, COLOR_COMMENT, l.len - pos_);
+        break;
+      }
+
+      last = now;
+    }
+
+    // multiline comment handling
+    last = ' ';
+    for (size_t j = 0; j < l.len; j++)
+    {
+      char now = l.base[j];
+
+      if (last == '/' && now == '*')
+      {
+        in_multiline_comment = true;
+        l.color[j - 1] = COLOR_COMMENT;
+      }
+
+      if (last == '*' && now == '/')
+      {
+        in_multiline_comment = false;
+        l.color[j] = COLOR_COMMENT;
+      }
+
+      if (in_multiline_comment)
+      {
+        l.color[j] = COLOR_COMMENT;
+      }
+
+      last = now;
+    }
+
+    // highlighting within the comment handling
+    pos = wstart = wend = 0;
+
+    while (CReadWordFromLine(c_comment_word_sep, l.base, l.len, &wstart, &wend, &pos))
+    {
+      size_t wordlen = wend - wstart;
+      const char *kw = NULL;
+      int kw_idx = 0;
+      for (;;)
+      {
+        kw = c_comment_keywords[kw_idx];
+        kw_idx += 1;
+
+        if (!kw)
+          break;
+
+        size_t kwlen = strlen(kw);
+
+        if (kwlen != wordlen)
+          continue;
+
+        if (memcmp(kw, l.base + wstart, kwlen) == 0)
+        {
+          memset(l.color + wstart, COLOR_COMMENT_NOTICE, kwlen);
+        }
+      }
+    }
+
+
+
   }
 }
 
@@ -408,6 +484,8 @@ void BackspaceKeyPressed()
     l->len -= 1;
     g_cursor_col -= 1;
   }
+
+  DoSyntaxHighlighting();
 }
 
 void DeleteKeyPressed()
@@ -457,6 +535,8 @@ void DeleteKeyPressed()
     RemoveChar(l->base, l->len, g_cursor_col);
     l->len -= 1;
   }
+
+  DoSyntaxHighlighting();
 }
 
 void EnterKeyPressed()
@@ -493,6 +573,8 @@ void EnterKeyPressed()
 
   OnCurrsorLineChanged();
   g_file_changed = true;
+
+  DoSyntaxHighlighting();
 }
 
 void InsertCharAtCurrsor(char c)
@@ -918,17 +1000,21 @@ int main(int argc, char *argv[])
         {
           Color color = BLACK;
 
-          switch (g_lines[i].color[c])
+          if (g_lines[i].color)
           {
-            // clang-format off
-            case C_Black: color = rgb(0, 0, 0);break;
-            case C_Blue:  color = rgb(0, 121, 241);break;
-            case C_Brick: color = rgb(203, 75, 22);break;
-            case C_Green: color = rgb(133, 153, 0);break;
-            case C_Purple:color = rgb(148, 6, 184); break;
-            case C_Gray:color   = rgb(156, 156, 156); break;
-            case C_Teal:color   = rgb(42, 161, 152); break;
-            // clang-format on
+            switch (g_lines[i].color[c])
+            {
+              // clang-format off
+              case C_Black: color = rgb(0, 0, 0);break;
+              case C_Blue:  color = rgb(0, 121, 241);break;
+              case C_Brick: color = rgb(203, 75, 22);break;
+              case C_Green: color = rgb(133, 153, 0);break;
+              case C_Purple:color = rgb(148, 6, 184); break;
+              case C_Gray:color   = rgb(156, 156, 156); break;
+              case C_Teal:color   = rgb(42, 161, 152); break;
+              case C_Red :color   = rgb(221, 15, 15); break;
+              // clang-format on
+            }
           }
 
           FDrawText(TextFormat("%c", g_lines[i].base[c]),

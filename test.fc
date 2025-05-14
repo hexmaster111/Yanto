@@ -1,13 +1,15 @@
-// This comment is here to help me test comments
-// turkies are known for using comments
+/* and this one is small but big */ size_t i_should_highlight = 0;
+int i = 0;   /*turkies are known for there int and size_t usage */
 
-/*This comment is going to be HUGE
-this is the best comment
-#include <SomethingSpicy.h>
-Everybody loves this comment*/
+ /*
+  * this is a comment with some keywords for testing that the highlighting
+  * is disabled while we are in multi-line comments.
+  */
 
-/* and this one is small but big */
 
+// WARNING: Turkies are evil, they eat bugs
+// NOTICE: Only bugs think that
+// TODO: Tell the bug that they are evil
 
 #include <SomethingSpicy.h>
 #include "test header with space.h"
@@ -29,5 +31,11 @@ int something = 0; // I am a comment!
 
 char c = 'c';
 char z = '\0';
+
+
+
+
+
+
 
 
