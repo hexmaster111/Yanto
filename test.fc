@@ -23,7 +23,7 @@ struct{
 } s;
 
 int main(int argc, char *argv[]) {
-    
+
 }
 
 const char *something = "I am a string!";
@@ -32,9 +32,7 @@ int something = 0; // I am a comment!
 char c = 'c';
 char z = '\0';
 
-
-
-
+int something = 10;
 
 
 

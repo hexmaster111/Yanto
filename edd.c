@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdint.h>
 
 #include <ctype.h>
 
@@ -28,6 +29,15 @@
 #define COLOR_DEFAULT (C_Black)
 #define COLOR_KEYWORD (C_Blue)
 
+Vector2 MeasureTextEx2(const char *text, size_t text_len);
+void OnCurrsorLineChanged();
+
+void FreeAllLines(char **lines, int count);
+char **ReadAllLines(const char *fname, int *out_linecount);
+
+Font g_font;
+float g_font_size, g_font_spacing;
+
 enum
 {
   C_Black = 0,
@@ -40,18 +50,9 @@ enum
   C_Red = 7
 };
 
-Vector2 MeasureTextEx2(const char *text, size_t text_len);
-void OnCurrsorLineChanged();
-
-void FreeAllLines(char **lines, int count);
-char **ReadAllLines(const char *fname, int *out_linecount);
-
-Font g_font;
-float g_font_size, g_font_spacing;
-
 struct Line
 {
-  char *color;
+  uint8_t *style;
   char *base;
   size_t len, cap;
 } *g_lines;
@@ -74,7 +75,7 @@ void GrowString(struct Line *l)
 {
   size_t new_cap = (l->cap + 1) * 2;
   l->base = realloc(l->base, new_cap);
-  l->color = realloc(l->color, new_cap);
+  l->style = realloc(l->style, new_cap);
   l->cap = new_cap;
 }
 
@@ -83,7 +84,7 @@ void AppendLine()
   g_lines = realloc(g_lines, sizeof(struct Line) * (g_lines_count + 1));
   printf("%zu\n", g_lines_count);
   g_lines[g_lines_count].base = 0;
-  g_lines[g_lines_count].color = 0;
+  g_lines[g_lines_count].style = 0;
   g_lines[g_lines_count].cap = 0;
   g_lines[g_lines_count].len = 0;
   g_lines_count += 1;
@@ -166,24 +167,23 @@ SEARCH_DONE:
   return true;
 }
 
-void DoSyntaxHighlighting()
+void DoCSyntaxHighlighing()
 {
-  if (!g_lines)
-    return;
-
   bool in_multiline_comment = false;
 
+  // if syntax highlighing is too taxing, perhaps only re-computing hl for visable lines is in order
+  // for (size_t i = g_topline; i < (g_screen_line_count + g_topline); i++)
   for (size_t i = 0; i < g_lines_count; i++)
   {
 
     struct Line l = g_lines[i];
 
-    if (!l.base || !l.color)
+    if (!l.base || !l.style)
       continue; // this line is empty
 
     size_t pos = 0;
     char last = ' ';
-    memset(l.color, COLOR_DEFAULT, l.cap);
+    memset(l.style, COLOR_DEFAULT, l.cap);
     size_t wstart = 0, wend = 0;
     // handles keywords and lang words
     while (CReadWordFromLine(c_word_sepprators, l.base, l.len, &wstart, &wend, &pos))
@@ -206,7 +206,7 @@ void DoSyntaxHighlighting()
 
         if (memcmp(kw, l.base + wstart, kwlen) == 0)
         {
-          memset(l.color + wstart, COLOR_KEYWORD, kwlen);
+          memset(l.style + wstart, COLOR_KEYWORD, kwlen);
           goto WORD_DONE;
         }
       }
@@ -228,7 +228,7 @@ void DoSyntaxHighlighting()
 
         if (memcmp(kw, l.base + wstart, kwlen) == 0)
         {
-          memset(l.color + wstart, COLOR_TYPE, kwlen);
+          memset(l.style + wstart, COLOR_TYPE, kwlen);
           goto WORD_DONE;
         }
       }
@@ -250,7 +250,7 @@ void DoSyntaxHighlighting()
 
         if (memcmp(kw, l.base + wstart, kwlen) == 0)
         {
-          memset(l.color + wstart, COLOR_PREPROC, kwlen);
+          memset(l.style + wstart, COLOR_PREPROC, kwlen);
           goto WORD_DONE;
         }
       }
@@ -272,7 +272,7 @@ void DoSyntaxHighlighting()
 
         if (memcmp(kw, l.base + wstart, kwlen) == 0)
         {
-          memset(l.color + wstart, COLOR_FLOWCTRL, kwlen);
+          memset(l.style + wstart, COLOR_FLOWCTRL, kwlen);
           goto WORD_DONE;
         }
       }
@@ -302,12 +302,12 @@ void DoSyntaxHighlighting()
 
         if (cs != '<' && cs != '>' && *wrd == cs && *(wrd + len - 1) == cs)
         {
-          memset(l.color + wstart - 1, COLOR_STRCHAR, len);
+          memset(l.style + wstart - 1, COLOR_STRCHAR, len);
           goto WORD_DONE_;
         }
         else if (*wrd == '<' && *(wrd + len - 1) == '>')
         {
-          memset(l.color + wstart - 1, COLOR_STRCHAR, len);
+          memset(l.style + wstart - 1, COLOR_STRCHAR, len);
           goto WORD_DONE_;
         }
       }
@@ -325,7 +325,7 @@ void DoSyntaxHighlighting()
       {
         // comment stuff to end of line....
         size_t pos_ = j - 1;
-        memset(l.color + pos_, COLOR_COMMENT, l.len - pos_);
+        memset(l.style + pos_, COLOR_COMMENT, l.len - pos_);
         break;
       }
 
@@ -341,18 +341,18 @@ void DoSyntaxHighlighting()
       if (last == '/' && now == '*')
       {
         in_multiline_comment = true;
-        l.color[j - 1] = COLOR_COMMENT;
+        l.style[j - 1] = COLOR_COMMENT;
       }
 
       if (last == '*' && now == '/')
       {
         in_multiline_comment = false;
-        l.color[j] = COLOR_COMMENT;
+        l.style[j] = COLOR_COMMENT;
       }
 
       if (in_multiline_comment)
       {
-        l.color[j] = COLOR_COMMENT;
+        l.style[j] = COLOR_COMMENT;
       }
 
       last = now;
@@ -381,14 +381,19 @@ void DoSyntaxHighlighting()
 
         if (memcmp(kw, l.base + wstart, kwlen) == 0)
         {
-          memset(l.color + wstart, COLOR_COMMENT_NOTICE, kwlen);
+          memset(l.style + wstart, COLOR_COMMENT_NOTICE, kwlen);
         }
       }
     }
-
-
-
   }
+}
+
+void DoSyntaxHighlighting()
+{
+  if (!g_lines)
+    return;
+
+  DoCSyntaxHighlighing();
 }
 
 void InsertChar(char *str, size_t str_len, char ch, int pos)
@@ -625,7 +630,7 @@ void LoadTextFile(const char *filepath)
     char *line = lines[i];
     g_lines[i].len = g_lines[i].cap = strlen(line);
     g_lines[i].base = line;
-    g_lines[i].color = malloc(strlen(line));
+    g_lines[i].style = malloc(strlen(line));
   }
 
   SetWindowTitle(TextFormat("%s - FCON", GetFileName(filepath)));
@@ -1000,9 +1005,9 @@ int main(int argc, char *argv[])
         {
           Color color = BLACK;
 
-          if (g_lines[i].color)
+          if (g_lines[i].style)
           {
-            switch (g_lines[i].color[c])
+            switch (g_lines[i].style[c])
             {
               // clang-format off
               case C_Black: color = rgb(0, 0, 0);break;
