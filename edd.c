@@ -368,18 +368,18 @@ void OpenTextFile(const char *filepath)
   memcpy(g_open_file_path, filepath, strlen(filepath));
 
   
-  g_open_file_syntax = S_PlainText;
-  
   const char *ext = GetFileExtension(GetFileName(filepath));
   
-  if (strcmp(ext, ".c") == 0)
-    g_open_file_syntax = S_C;
-  else if (strcmp(ext, ".C") == 0)
-    g_open_file_syntax = S_C;
-  else if (strcmp(ext, ".h") == 0)
-    g_open_file_syntax = S_C;
-  else if (strcmp(ext, ".H") == 0)
-    g_open_file_syntax = S_C;
+  g_open_file_syntax = S_PlainText;
+  
+  // clang-format off
+  if (strcmp(ext, ".c") == 0)      g_open_file_syntax = S_C;
+  else if (strcmp(ext, ".C") == 0) g_open_file_syntax = S_C;
+  else if (strcmp(ext, ".h") == 0) g_open_file_syntax = S_C;
+  else if (strcmp(ext, ".H") == 0) g_open_file_syntax = S_C;
+  else if (strcmp(ext, ".v") == 0) g_open_file_syntax = S_Verilog;
+  else if (strcmp(ext, ".V") == 0) g_open_file_syntax = S_Verilog;
+  // clang-format on
 
   DoSyntaxHighlighting();
 }
