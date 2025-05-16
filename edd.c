@@ -367,11 +367,10 @@ void OpenTextFile(const char *filepath)
   SetWindowTitle(TextFormat("%s - FCON", GetFileName(filepath)));
   memcpy(g_open_file_path, filepath, strlen(filepath));
 
-  
   const char *ext = GetFileExtension(GetFileName(filepath));
-  
+
   g_open_file_syntax = S_PlainText;
-  
+
   // clang-format off
   if (strcmp(ext, ".c") == 0)      g_open_file_syntax = S_C;
   else if (strcmp(ext, ".C") == 0) g_open_file_syntax = S_C;
@@ -444,6 +443,83 @@ void SaveOpenFile()
 
   fclose(f);
   g_file_changed = false;
+}
+
+// stop_at must be \0 terminated list or NULL to never stop
+void JumpCursor(int dir, const char *stop_at)
+{
+  if (!g_lines)
+    return;
+  struct Line l = g_lines[g_cursor_line];
+  if (!l.base)
+    return;
+
+  // idea: skip any groups of same chars (skip row of spaces)
+
+  g_cursor_col += dir;
+  if (g_cursor_col < 0)
+    g_cursor_col = 0;
+  if (g_cursor_col > l.len)
+    g_cursor_col = l.len;
+
+  while (g_cursor_col > 0 &&
+         g_cursor_col < l.len)
+  {
+    g_cursor_col += dir;
+
+    if (!stop_at)
+      continue; // only stop at eol or sol
+
+    char ch = stop_at[0];
+    for (size_t i = 0; ch != '\0'; i++)
+    {
+      ch = stop_at[i];
+      if (l.base[g_cursor_col] == ch)
+      {
+        goto DONE;
+      }
+    }
+  }
+DONE:;
+}
+
+const char *jump_stops = " {}()<>\"\',;";
+void JumpCursorToLeft() { JumpCursor(-1, jump_stops); }
+void JumpCursorToRight() { JumpCursor(1, jump_stops); }
+void HomeCursor() { JumpCursor(-1, NULL); }
+void EndCursor() { JumpCursor(1, NULL); }
+
+void MoveLineUp()
+{
+  if (!g_lines)
+    return;
+  if (g_cursor_line - 1 < 0)
+    return;
+
+  struct Line *a = &g_lines[g_cursor_line];
+  struct Line *b = &g_lines[g_cursor_line - 1];
+
+  struct Line tmp = *a;
+  *a = *b;
+  *b = tmp;
+
+  g_cursor_line -= 1;
+}
+
+void MoveLineDown()
+{
+  if (!g_lines)
+    return;
+  if (g_cursor_line + 1 >= g_lines_count)
+    return;
+  struct Line *a = &g_lines[g_cursor_line];
+  struct Line *b = &g_lines[g_cursor_line + 1];
+
+  struct Line tmp = *a;
+  *a = *b;
+  *b = tmp;
+
+  g_cursor_line += 1;
 }
 
 int main(int argc, char *argv[])
@@ -582,6 +658,25 @@ int main(int argc, char *argv[])
       {
         g_topline += 1;
       }
+      else if (IsKeyPressed(KEY_LEFT) || IsKeyPressedRepeat(KEY_LEFT))
+      {
+        JumpCursorToLeft();
+      }
+      else if (IsKeyPressed(KEY_RIGHT) || IsKeyPressedRepeat(KEY_RIGHT))
+      {
+        JumpCursorToRight();
+      }
+    }
+    if (IsKeyDown(KEY_LEFT_ALT) || IsKeyDown(KEY_RIGHT_ALT))
+    {
+      if (IsKeyPressed(KEY_UP) || IsKeyPressedRepeat(KEY_UP))
+      {
+        MoveLineUp();
+      }
+      else if (IsKeyPressed(KEY_DOWN) || IsKeyPressedRepeat(KEY_DOWN))
+      {
+        MoveLineDown();
+      }
     }
     else
     {
@@ -591,6 +686,14 @@ int main(int argc, char *argv[])
         g_topline -= g_screen_line_count - 5;
         g_cursor_line -= g_screen_line_count - 5;
         OnCurrsorLineChanged();
+      }
+      else if (IsKeyPressed(KEY_HOME))
+      {
+        HomeCursor();
+      }
+      else if (IsKeyPressed(KEY_END))
+      {
+        EndCursor();
       }
       else if (IsKeyPressed(KEY_PAGE_DOWN) || IsKeyPressedRepeat(KEY_PAGE_DOWN))
       {

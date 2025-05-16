@@ -10,7 +10,7 @@
             "preLaunchTask": "build",
             "request": "launch",
             "program": "${workspaceFolder}/fcon",
-            "args": ["demo/test.v"],
+            "args": ["demo/test.c"],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",
             "environment": [],
