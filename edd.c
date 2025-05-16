@@ -97,8 +97,6 @@ void AppendLine()
   g_lines_count += 1;
 }
 
-#include "c_syntax_hl.c"
-
 void DoTxtSyntaxHighlighting()
 {
   for (size_t i = 0; i < g_lines_count; i++)
@@ -112,6 +110,7 @@ void DoTxtSyntaxHighlighting()
   }
 }
 
+#include "c_syntax_hl.c"
 void DoSyntaxHighlighting()
 {
   if (!g_lines)
@@ -315,11 +314,6 @@ void EnterKeyPressed()
 
 void InsertCharAtCurrsor(char c)
 {
-  if (g_cursor_line >= g_lines_count)
-  {
-    AppendLine();
-  }
-
   struct Line *l = &g_lines[g_cursor_line];
 
   if (l->len + 1 > l->cap)
@@ -666,6 +660,14 @@ int main(int argc, char *argv[])
       {
         JumpCursorToRight();
       }
+      // else if (IsKeyPressed(KEY_Z))
+      // {
+      //   Undo();
+      // }
+      // else if (IsKeyPressed(KEY_Z))
+      // {
+      //   Redo();
+      // }
     }
     if (IsKeyDown(KEY_LEFT_ALT) || IsKeyDown(KEY_RIGHT_ALT))
     {
@@ -739,81 +741,83 @@ int main(int argc, char *argv[])
           InsertCharAtCurrsor(' ');
         }
       }
-
-      Vector2 scroll = GetMouseWheelMoveV();
-      g_topline -= scroll.y * 2;
-
-      if (g_topline + g_screen_line_count > g_lines_count)
+      else
       {
-        g_topline = g_lines_count - g_screen_line_count;
-      }
+        int c;
+        bool anything_entered = false;
 
-      if (0 > g_topline)
-        g_topline = 0;
-
-      g_x_scroll_view.offset.x += scroll.x * 30;
-      if (g_x_scroll_view.offset.x > 0)
-        g_x_scroll_view.offset.x = 0;
-
-      if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT))
-      { // TODO: positions off a little in this mehtod....
-        Vector2 pt = GetMousePosition();
-
-        for (size_t i = g_topline; i < (g_screen_line_count + g_topline); i++)
+        do
         {
-          Rectangle r = {g_font_size * LINE_NUMBERS_SUPPORTED - 1,
-                         (i - g_topline) * g_font_size, GetScreenWidth(),
-                         g_font_size};
-
-          if (CheckCollisionPointRec(pt, r))
-          {
-            g_cursor_line = i;
-
-            // now that we found the line, lets find the col that we are on
-            struct Line *line = &g_lines[i];
-            printf("%p\n", line);
-
-            if (g_cursor_line >= g_lines_count || line->len == 0)
-            {
-              g_cursor_col = 0;
-            }
-            else
-            {
-              for (size_t col = 0; col <= line->len; col++)
-              {
-                Vector2 textSize = MeasureTextEx2(line->base, col);
-                if (pt.x < textSize.x + g_font_size * LINE_NUMBERS_SUPPORTED)
-                {
-                  g_cursor_col = col;
-                  break;
-                }
-              }
-            }
-
+          c = GetCharPressed();
+          if (!c)
             break;
-          }
+
+          InsertCharAtCurrsor(c);
+          anything_entered = true;
+
+        } while (c);
+
+        if (anything_entered)
+        {
+          DoSyntaxHighlighting();
         }
       }
+    }
 
-      int c;
-      bool anything_entered = false;
+    if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT))
+    { // TODO: positions off a little in this mehtod....
+      Vector2 pt = GetMousePosition();
 
-      do
+      for (size_t i = g_topline; i < (g_screen_line_count + g_topline); i++)
       {
-        c = GetCharPressed();
-        if (!c)
+        Rectangle r = {g_font_size * LINE_NUMBERS_SUPPORTED - 1,
+                       (i - g_topline) * g_font_size, GetScreenWidth(),
+                       g_font_size};
+
+        if (CheckCollisionPointRec(pt, r))
+        {
+          g_cursor_line = i;
+
+          // now that we found the line, lets find the col that we are on
+          struct Line *line = &g_lines[i];
+          printf("%p\n", line);
+
+          if (g_cursor_line >= g_lines_count || line->len == 0)
+          {
+            g_cursor_col = 0;
+          }
+          else
+          {
+            for (size_t col = 0; col <= line->len; col++)
+            {
+              Vector2 textSize = MeasureTextEx2(line->base, col);
+              if (pt.x < textSize.x + g_font_size * LINE_NUMBERS_SUPPORTED)
+              {
+                g_cursor_col = col;
+                break;
+              }
+            }
+          }
+
           break;
-
-        InsertCharAtCurrsor(c);
-        anything_entered = true;
-
-      } while (c);
-
-      if (anything_entered)
-      {
-        DoSyntaxHighlighting();
+        }
       }
     }
+
+    Vector2 scroll = GetMouseWheelMoveV();
+    g_topline -= scroll.y * 2;
+
+    if (g_topline + g_screen_line_count > g_lines_count)
+    {
+      g_topline = g_lines_count - g_screen_line_count;
+    }
+
+    if (0 > g_topline)
+      g_topline = 0;
+
+    g_x_scroll_view.offset.x += scroll.x * 30;
+    if (g_x_scroll_view.offset.x > 0)
+      g_x_scroll_view.offset.x = 0;
 
     if (0 > g_topline)
       g_topline = 0;

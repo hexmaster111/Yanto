@@ -34,3 +34,53 @@ int main() {
 
     return 0;
 }
+
+
+// ----------- UNDO REDO IDEAS ------------------ //
+
+typedef struct
+{
+  enum
+  {
+    URa_InsertChar,
+  } kind;
+
+  union
+  {
+    struct
+    {
+      size_t line, offset;
+      char c;
+    } insert_char;
+  };
+} UnReDoAction;
+
+typedef struct
+{
+  size_t cap, top;
+  UnReDoAction *items;
+} UnReDoStack;
+
+bool IsUnReDoStackEmpty(UnReDoStack *t) { return t->top <= 0; }
+
+UnReDoAction PopUnReDo(UnReDoStack *t)
+{
+  UnReDoAction ret = t->items[t->top - 1];
+  t->top -= 1;
+  return ret;
+}
+
+void PushUnReDo(UnReDoStack *t, UnReDoAction val)
+{
+  if (t->top + 1 > t->cap)
+  {
+    size_t new_cap = (t->cap + 1) * 2;
+    t->items = realloc(t->items, new_cap * sizeof(UnReDoAction));
+    t->cap = new_cap;
+  }
+
+  t->items[t->top] = val;
+  t->top += 1;
+}
+
+UnReDoStack g_undo = {0}, g_redo = {0};
