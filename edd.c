@@ -924,14 +924,14 @@ int main(int argc, char *argv[])
                    pos.width - 1,
                    true);
 
-      int fn_measure = osfd_MeasureText("Find Next");
-      int fp_measure = osfd_MeasureText("Find Prev");
+      int fn_measure = osfd_MeasureText("Next");
+      int fp_measure = osfd_MeasureText("Prev");
 
-      osfd_TextButton("Find Next", pos.x, pos.y + g_font_size + 1, fn_measure);
-      osfd_TextButton("Find Prev",
+      osfd_TextButton("Next", pos.x, pos.y + g_font_size + 1, fn_measure);
+      osfd_TextButton("Prev",
                       (pos.x + pos.width) - fp_measure,
                       pos.y + g_font_size + 2,
-                      osfd_MeasureText("Find Next"));
+                      osfd_MeasureText("Next"));
     }
 
     { // statusbar rendering
