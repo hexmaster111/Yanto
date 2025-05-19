@@ -903,7 +903,8 @@ int main(int argc, char *argv[])
 
     if (show_search_ui)
     {
-      static char serach_buffer[32];
+      static char serach_buffer[32] = {0};
+      static char replace_buffer[32] = {0};
 
       if (IsKeyPressed(KEY_ESCAPE))
       {
@@ -914,24 +915,32 @@ int main(int argc, char *argv[])
           GetScreenWidth() * 0.75f,
           10,
           GetScreenWidth() - (GetScreenWidth() * 0.75f),
-          g_font_size * 2 + 3};
+          g_font_size * 3 + 3};
 
-      DrawRectangleRec(pos, BEIGE);
+      DrawRectangleRec(pos, rgb(244, 255, 184));
 
+      // search box
       osfd_TextBox(serach_buffer, sizeof(serach_buffer),
                    pos.x + 1,
                    pos.y + 1,
                    pos.width - 1,
                    true);
 
+      // replace box
+      osfd_TextBox(replace_buffer, sizeof(replace_buffer),
+                   pos.x + 1,
+                   pos.y + 1 + g_font_size,
+                   pos.width - 1,
+                   false);
+
       int fn_measure = osfd_MeasureText("Next");
       int fp_measure = osfd_MeasureText("Prev");
 
-      osfd_TextButton("Next", pos.x, pos.y + g_font_size + 1, fn_measure);
+      osfd_TextButton("Next", pos.x, pos.y + g_font_size + g_font_size + 1, fn_measure);
       osfd_TextButton("Prev",
                       (pos.x + pos.width) - fp_measure,
-                      pos.y + g_font_size + 2,
-                      osfd_MeasureText("Next"));
+                      pos.y + g_font_size + g_font_size + 2,
+                      fp_measure);
     }
 
     { // statusbar rendering
