@@ -7,7 +7,7 @@
 
 // your program shoud define these as non-static
 extern Font g_font;
-extern float g_font_size;
+extern float g_font_height;
 extern float g_font_spacing;
 
 // TODO: These methods should be moved to this c file
@@ -54,7 +54,7 @@ int PopUp(const char *title, const char *message, const char *buttons)
     charidx = 0;
 
 
-    Rectangle pos = {100, 100, 200, g_font_size * (3 + (btnidx - 1))};
+    Rectangle pos = {100, 100, 200, g_font_height * (3 + (btnidx - 1))};
     
 
     while (true)
@@ -70,8 +70,8 @@ int PopUp(const char *title, const char *message, const char *buttons)
         //ClearBackground((Color){0xee, 0xee, 0xef});
 
         DrawRectangleRec(pos, INTER_BG_COLOR);
-        DrawTextEx(g_font, title, (Vector2){pos.x, pos.y}, g_font_size, g_font_spacing, INTER_TEXT_COLOR);
-        DrawTextEx(g_font, message, (Vector2){pos.x, pos.y + g_font_size}, g_font_size, g_font_spacing, INTER_TEXT_COLOR);
+        DrawTextEx(g_font, title, (Vector2){pos.x, pos.y}, g_font_height, g_font_spacing, INTER_TEXT_COLOR);
+        DrawTextEx(g_font, message, (Vector2){pos.x, pos.y + g_font_height}, g_font_height, g_font_spacing, INTER_TEXT_COLOR);
 
         for (size_t i = 0; i < btnidx; i++)
         {
@@ -81,7 +81,7 @@ int PopUp(const char *title, const char *message, const char *buttons)
             if (osfd_TextButton(
                     btn_txt[i],
                     pos.x + pos.width - sz.x,
-                    (pos.y + g_font_size + g_font_size) + (i * g_font_size),
+                    (pos.y + g_font_height + g_font_height) + (i * g_font_height),
                     sz.x) //
             )
             {

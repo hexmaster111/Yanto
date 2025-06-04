@@ -32,12 +32,12 @@
 
 // your program shoud define these as non-static
 extern Font g_font;
-extern float g_font_size;
+extern float g_font_height;
 extern float g_font_spacing;
 
 int osfd_MeasureText(const char *text)
 {
-    return MeasureTextEx(g_font, text, g_font_size, g_font_spacing).x;
+    return MeasureTextEx(g_font, text, g_font_height, g_font_spacing).x;
 }
 
 Vector2 osfd_MeasureTextEx2(const char *text, size_t text_len)
@@ -53,8 +53,8 @@ Vector2 osfd_MeasureTextEx2(const char *text, size_t text_len)
     float textWidth = 0.0f;
     float tempTextWidth = 0.0f; // Used to count longer text line width
 
-    float textHeight = g_font_size;
-    float scaleFactor = g_font_size / (float)g_font.baseSize;
+    float textHeight = g_font_height;
+    float scaleFactor = g_font_height / (float)g_font.baseSize;
 
     int letter = 0; // Current character
     int index = 0;  // Index position in sprite font
@@ -83,7 +83,7 @@ Vector2 osfd_MeasureTextEx2(const char *text, size_t text_len)
             byteCounter = 0;
             textWidth = 0;
 
-            textHeight += (g_font_size + g_font_spacing);
+            textHeight += (g_font_height + g_font_spacing);
         }
 
         if (tempByteCounter < byteCounter)
@@ -102,7 +102,7 @@ Vector2 osfd_MeasureTextEx2(const char *text, size_t text_len)
 // true on click
 bool osfd_TextButton(const char *text, int x, int y, int textWidth)
 {
-    Rectangle me = {x, y, textWidth, g_font_size};
+    Rectangle me = {x, y, textWidth, g_font_height};
 
     bool hovered = CheckCollisionPointRec(GetMousePosition(), me);
     bool clicked = hovered && IsMouseButtonReleased(MOUSE_BUTTON_LEFT);
@@ -129,7 +129,7 @@ bool osfd_TextButton(const char *text, int x, int y, int textWidth)
     }
 
     DrawRectangleRec(me, bg);
-    DrawTextEx(g_font, text, (Vector2){x, y}, g_font_size, g_font_spacing, fg);
+    DrawTextEx(g_font, text, (Vector2){x, y}, g_font_height, g_font_spacing, fg);
     return clicked;
 }
 
@@ -191,18 +191,18 @@ TBAction osfd_TextBox(char *text, int textcap, int x, int y, int width, bool sel
         len += 1;
     }
 
-    DrawRectangle(x, y, width, g_font_size, selected_for_input ? OSFD_TEXTBOX_ACTIVE_BG : OSFD_TEXTBOX_BG);
-    DrawTextEx(g_font, text, (Vector2){x, y}, g_font_size, g_font_spacing, OSFD_TEXTBOX_FG);
+    DrawRectangle(x, y, width, g_font_height, selected_for_input ? OSFD_TEXTBOX_ACTIVE_BG : OSFD_TEXTBOX_BG);
+    DrawTextEx(g_font, text, (Vector2){x, y}, g_font_height, g_font_spacing, OSFD_TEXTBOX_FG);
 
     if (selected_for_input && currsor_flash)
     {
         Vector2 cpos = osfd_MeasureTextEx2(text, currsor_pos);
-        DrawRectangle(cpos.x + x, y, 1, g_font_size, OSFD_TEXTBOX_FG);
+        DrawRectangle(cpos.x + x, y, 1, g_font_height, OSFD_TEXTBOX_FG);
     }
 
     if (selected_for_input && IsKeyPressed(KEY_ENTER))
         return TBAccept;
-    return (IsMouseButtonReleased(MOUSE_BUTTON_LEFT) && CheckCollisionPointRec(GetMousePosition(), (Rectangle){x, y, width, g_font_size})) ? TBSelect : TBNothing;
+    return (IsMouseButtonReleased(MOUSE_BUTTON_LEFT) && CheckCollisionPointRec(GetMousePosition(), (Rectangle){x, y, width, g_font_height})) ? TBSelect : TBNothing;
 }
 
 #include <stdio.h>
@@ -267,16 +267,16 @@ const char *osfd_DialogCore(
             300,
         };
 
-        linesfit = outline.height / g_font_size;
+        linesfit = outline.height / g_font_height;
         linesfit -= 2; // file name + address bars
 
         if (IsKeyDown(KEY_LEFT_CONTROL) && IsKeyPressed(KEY_EQUAL))
         {
-            g_font_size += 1;
+            g_font_height += 1;
         }
         else if (IsKeyDown(KEY_LEFT_CONTROL) && IsKeyPressed(KEY_MINUS))
         {
-            g_font_size -= 1;
+            g_font_height -= 1;
         }
 
         Vector2 wheel = GetMouseWheelMoveV();
@@ -330,7 +330,7 @@ const char *osfd_DialogCore(
 
         TBAction tb_fname_action = osfd_TextBox(fname, sizeof(fname),
                                                 outline.x,
-                                                outline.y + outline.height - g_font_size,
+                                                outline.y + outline.height - g_font_height,
                                                 filename_width,
                                                 element_focused == 1);
 
@@ -354,11 +354,11 @@ const char *osfd_DialogCore(
 
         bool openClicked = osfd_TextButton(acceptButtonText,
                                            (outline.x + outline.width) - (accept_text_measure + cancel_text_measure),
-                                           (outline.y + outline.height) - g_font_size, accept_text_measure);
+                                           (outline.y + outline.height) - g_font_height, accept_text_measure);
 
         bool btn_cancel_clicked = osfd_TextButton(CANCEL_TEXT,
                                                   (outline.x + outline.width) - (cancel_text_measure),
-                                                  (outline.y + outline.height) - g_font_size, cancel_text_measure);
+                                                  (outline.y + outline.height) - g_font_height, cancel_text_measure);
 
         bool backClicked = osfd_TextButton(BACK_TEXT, outline.x, outline.y, back_text_measutre);
         bool forwardClicked = osfd_TextButton(FORWARD_TEXT, outline.x + back_text_measutre, outline.y, forward_text_measure);
@@ -384,7 +384,7 @@ const char *osfd_DialogCore(
 
             if (osfd_TextButton(GetFileName(fp),
                                 outline.x,
-                                outline.y + (g_font_size * (draw_line + 1)),
+                                outline.y + (g_font_height * (draw_line + 1)),
                                 outline.width))
             {
                 printf("%s\n", cwd);

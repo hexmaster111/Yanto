@@ -36,7 +36,7 @@ void FreeAllLines(char **lines, int count);
 char **ReadAllLines(const char *fname, int *out_linecount);
 
 Font g_font;
-float g_font_size, g_font_spacing;
+float g_font_height, g_font_spacing;
 
 enum
 {
@@ -330,7 +330,7 @@ void InsertCharAtCurrsor(char c)
 
 void FDrawText(const char *text, float x, float y, Color color)
 {
-  DrawTextEx(g_font, text, (Vector2){x, y}, g_font_size, 1, color);
+  DrawTextEx(g_font, text, (Vector2){x, y}, g_font_height, 1, color);
 }
 
 void OpenTextFile(const char *filepath)
@@ -377,7 +377,7 @@ void OpenTextFile(const char *filepath)
   DoSyntaxHighlighting();
 }
 
-void OnResize() { g_screen_line_count = (GetScreenHeight() / g_font_size) - 1; /*for status*/ }
+void OnResize() { g_screen_line_count = (GetScreenHeight() / g_font_height) - 1; /*for status*/ }
 
 void OnCurrsorLineChanged()
 {
@@ -537,7 +537,7 @@ int main(int argc, char *argv[])
   }
 
   g_font_spacing = 1;
-  g_font_size = DEFAULT_FONT_SIZE;
+  g_font_height = DEFAULT_FONT_SIZE;
   g_topline = 0;
   g_lines_count = 0;
   g_lines = NULL;
@@ -602,6 +602,9 @@ int main(int argc, char *argv[])
       OnResize();
     }
 
+    float font_width_height_ratio = g_font.recs[0].height / g_font.recs[0].width;
+    int effective_font_width = g_font_height / font_width_height_ratio;
+
     if (!show_search_ui)
     {
 
@@ -639,17 +642,17 @@ int main(int argc, char *argv[])
         }
         else if (IsKeyPressed(KEY_EQUAL) || IsKeyPressedRepeat(KEY_EQUAL))
         {
-          g_font_size += 1.0f;
+          g_font_height += 1.0f;
           OnResize();
         }
         else if (IsKeyPressed(KEY_MINUS) || IsKeyPressedRepeat(KEY_MINUS))
         {
-          g_font_size -= 1.0f;
+          g_font_height -= 1.0f;
           OnResize();
         }
         else if (IsKeyPressed(KEY_ZERO))
         {
-          g_font_size = DEFAULT_FONT_SIZE;
+          g_font_height = DEFAULT_FONT_SIZE;
           OnResize();
         }
         else if (IsKeyPressed(KEY_UP) || IsKeyPressedRepeat(KEY_UP))
@@ -773,14 +776,15 @@ int main(int argc, char *argv[])
       }
 
       if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT))
-      { // TODO: positions off a little in this mehtod....
+      {
         Vector2 pt = GetMousePosition();
 
         for (size_t i = g_topline; i < (g_screen_line_count + g_topline); i++)
         {
-          Rectangle r = {g_font_size * LINE_NUMBERS_SUPPORTED - 1,
-                         (i - g_topline) * g_font_size, GetScreenWidth(),
-                         g_font_size};
+          Rectangle r = {effective_font_width * LINE_NUMBERS_SUPPORTED - 1,
+                         (i - g_topline) * g_font_height,
+                         GetScreenWidth(),
+                         g_font_height};
 
           if (CheckCollisionPointRec(pt, r))
           {
@@ -788,7 +792,6 @@ int main(int argc, char *argv[])
 
             // now that we found the line, lets find the col that we are on
             struct Line *line = &g_lines[i];
-            printf("%p\n", line);
 
             if (g_cursor_line >= g_lines_count || line->len == 0)
             {
@@ -799,7 +802,7 @@ int main(int argc, char *argv[])
               for (size_t col = 0; col <= line->len; col++)
               {
                 Vector2 textSize = MeasureTextEx2(line->base, col);
-                if (pt.x < textSize.x + g_font_size * LINE_NUMBERS_SUPPORTED)
+                if (pt.x < textSize.x + (LINE_NUMBERS_SUPPORTED * effective_font_width))
                 {
                   g_cursor_col = col;
                   break;
@@ -851,14 +854,16 @@ int main(int argc, char *argv[])
       for (size_t i = g_topline; i < (g_screen_line_count + g_topline); i++)
       {
 
-        FDrawText(TextFormat("%*d", LINE_NUMBERS_SUPPORTED, i + 1), 3, (i - g_topline) * g_font_size, BLACK);
-
         if (i == g_cursor_line)
         {
-          DrawRectangle(g_font_size * LINE_NUMBERS_SUPPORTED - 1,
-                        (i - g_topline) * g_font_size, GetScreenWidth(),
-                        g_font_size, (Color){0xee, 0xe8, 0xd5, 0xFF});
+          DrawRectangle(0,
+                        (i - g_topline) * g_font_height,
+                        GetScreenWidth() * 2,
+                        g_font_height,
+                        rgb(238, 232, 213));
         }
+
+        FDrawText(TextFormat("%*d", LINE_NUMBERS_SUPPORTED, i + 1), 3, (i - g_topline) * g_font_height, BLACK);
 
         if (i >= g_lines_count)
           break;
@@ -872,21 +877,21 @@ int main(int argc, char *argv[])
             switch (g_lines[i].style[c])
             {
               // clang-format off
-              case C_Black: color = rgb(0, 0, 0);break;
-              case C_Blue:  color = rgb(0, 121, 241);break;
-              case C_Brick: color = rgb(203, 75, 22);break;
-              case C_Green: color = rgb(133, 153, 0);break;
-              case C_Purple:color = rgb(148, 6, 184); break;
-              case C_Gray:color   = rgb(156, 156, 156); break;
-              case C_Teal:color   = rgb(42, 161, 152); break;
-              case C_Red :color   = rgb(221, 15, 15); break;
+              case C_Black  : color = rgb(0, 0, 0);       break;
+              case C_Blue   : color = rgb(0, 121, 241);   break;
+              case C_Brick  : color = rgb(203, 75, 22);   break;
+              case C_Green  : color = rgb(133, 153, 0);   break;
+              case C_Purple : color = rgb(148, 6, 184);   break;
+              case C_Gray   : color = rgb(156, 156, 156); break;
+              case C_Teal   : color = rgb(42, 161, 152);  break;
+              case C_Red    : color = rgb(221, 15, 15);   break;
               // clang-format on
             }
           }
 
           FDrawText(TextFormat("%c", g_lines[i].base[c]),
-                    g_font.recs[0].width * (LINE_NUMBERS_SUPPORTED + 1 + c),
-                    (i - g_topline) * g_font_size, color);
+                    effective_font_width * (LINE_NUMBERS_SUPPORTED + 2 + c),
+                    (i - g_topline) * g_font_height, color);
         }
       }
     }
@@ -894,9 +899,9 @@ int main(int argc, char *argv[])
     { // currsor rendering
       struct Line *l = &g_lines[g_cursor_line];
       // Vector2 linelen = MeasureTextEx2(l->base, g_cursor_col);
-      float llx = g_font.recs[0].width * (LINE_NUMBERS_SUPPORTED + 1 + g_cursor_col);
-      float cy = (g_cursor_line - g_topline) * g_font_size;
-      DrawLineEx((Vector2){llx, cy}, (Vector2){llx, cy + g_font_size}, 2, BLACK);
+      float llx = effective_font_width * (LINE_NUMBERS_SUPPORTED + 2 + g_cursor_col);
+      float cy = (g_cursor_line - g_topline) * g_font_height;
+      DrawLineEx((Vector2){llx, cy}, (Vector2){llx, cy + g_font_height}, 2, BLACK);
     }
 
     EndMode2D();
@@ -915,7 +920,7 @@ int main(int argc, char *argv[])
           GetScreenWidth() * 0.75f,
           10,
           GetScreenWidth() - (GetScreenWidth() * 0.75f),
-          g_font_size * 3 + 3};
+          g_font_height * 3 + 3};
 
       DrawRectangleRec(pos, rgb(244, 255, 184));
 
@@ -929,25 +934,25 @@ int main(int argc, char *argv[])
       // replace box
       osfd_TextBox(replace_buffer, sizeof(replace_buffer),
                    pos.x + 1,
-                   pos.y + 1 + g_font_size,
+                   pos.y + 1 + g_font_height,
                    pos.width - 1,
                    false);
 
       int fn_measure = osfd_MeasureText("Next");
       int fp_measure = osfd_MeasureText("Prev");
 
-      osfd_TextButton("Next", pos.x, pos.y + g_font_size + g_font_size + 1, fn_measure);
+      osfd_TextButton("Next", pos.x, pos.y + g_font_height + g_font_height + 1, fn_measure);
       osfd_TextButton("Prev",
                       (pos.x + pos.width) - fp_measure,
-                      pos.y + g_font_size + g_font_size + 2,
+                      pos.y + g_font_height + g_font_height + 2,
                       fp_measure);
     }
 
     { // statusbar rendering
-      int status_y = GetScreenHeight() - g_font_size;
-      DrawRectangle(0, status_y, GetScreenWidth(), g_font_size, (Color){0xd8, 0xd4, 0xc4, 0xff});
+      int status_y = GetScreenHeight() - g_font_height;
+      DrawRectangle(0, status_y, GetScreenWidth(), g_font_height, (Color){0xd8, 0xd4, 0xc4, 0xff});
       // DrawTextCodepoint(g_font, '~' + 11, (Vector2){10, status_y}, g_font_size, BLACK);
-      DrawTextEx(g_font, TextFormat("Font Size %.0f", g_font_size), (Vector2){10, status_y}, g_font_size, g_font_spacing, BLACK);
+      DrawTextEx(g_font, TextFormat("Font Size %.0f", g_font_height), (Vector2){10, status_y}, g_font_height, g_font_spacing, BLACK);
     }
 
     // DrawText(TextFormat("TOP IDX: %d\n%u\n%f\n%f", g_topline, redraw_count, cy,
@@ -978,8 +983,8 @@ Vector2 MeasureTextEx2(const char *text, size_t text_len)
   float textWidth = 0.0f;
   float tempTextWidth = 0.0f; // Used to count longer text line width
 
-  float textHeight = g_font_size;
-  float scaleFactor = g_font_size / (float)g_font.baseSize;
+  float textHeight = g_font_height;
+  float scaleFactor = g_font_height / (float)g_font.baseSize;
 
   int letter = 0; // Current character
   int index = 0;  // Index position in sprite font
@@ -1008,7 +1013,7 @@ Vector2 MeasureTextEx2(const char *text, size_t text_len)
       byteCounter = 0;
       textWidth = 0;
 
-      textHeight += (g_font_size + g_font_spacing);
+      textHeight += (g_font_height + g_font_spacing);
     }
 
     if (tempByteCounter < byteCounter)
