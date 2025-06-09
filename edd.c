@@ -30,7 +30,7 @@
 #define COLOR_KEYWORD (C_Blue)
 
 Vector2 MeasureTextEx2(const char *text, size_t text_len);
-void OnCurrsorLineChanged();
+void PostCurrsorLineChanged();
 
 void FreeAllLines(char **lines, int count);
 char **ReadAllLines(const char *fname, int *out_linecount);
@@ -55,6 +55,8 @@ struct Line
   uint8_t *style;
   char *base;
   size_t len, cap;
+
+  size_t last_cursor_pos;
 } *g_lines;
 
 size_t g_lines_count;
@@ -66,6 +68,8 @@ int g_cursor_line, g_cursor_col;
 char g_open_file_path[1024] = {0};
 
 bool g_file_changed = false;
+
+// size_t g_sel_start_ln, g_sel_start_col, g_sel_end_ln, g_sel_end_col;
 
 enum Syntax
 {
@@ -182,7 +186,7 @@ void BackspaceKeyPressed()
     g_cursor_line -= 1;
 
     g_cursor_col = g_lines[g_cursor_line].len;
-    OnCurrsorLineChanged();
+    PostCurrsorLineChanged();
     g_file_changed = true;
   }
   else if (0 >= g_cursor_col && g_cursor_line > 0)
@@ -210,7 +214,7 @@ void BackspaceKeyPressed()
     g_lines_count--;
     g_cursor_line -= 1;
     g_cursor_col = currsor_return_pos;
-    OnCurrsorLineChanged();
+    PostCurrsorLineChanged();
   }
   else if (0 < g_cursor_col)
   {
@@ -237,7 +241,7 @@ void DeleteKeyPressed()
     }
 
     g_lines_count--;
-    OnCurrsorLineChanged();
+    PostCurrsorLineChanged();
     g_file_changed = true;
   }
   else if (l->len == g_cursor_col && g_cursor_line + 1 < g_lines_count)
@@ -263,7 +267,7 @@ void DeleteKeyPressed()
     }
 
     g_lines_count -= 1;
-    OnCurrsorLineChanged();
+    PostCurrsorLineChanged();
   }
   else
   {
@@ -306,7 +310,7 @@ void EnterKeyPressed()
     g_cursor_col = 0;
   }
 
-  OnCurrsorLineChanged();
+  PostCurrsorLineChanged();
   g_file_changed = true;
 
   DoSyntaxHighlighting();
@@ -379,7 +383,12 @@ void OpenTextFile(const char *filepath)
 
 void OnResize() { g_screen_line_count = (GetScreenHeight() / g_font_height) - 1; /*for status*/ }
 
-void OnCurrsorLineChanged()
+void PreCurrsorLineChanged()
+{
+  g_lines[g_cursor_line].last_cursor_pos = g_cursor_col;
+}
+
+void PostCurrsorLineChanged()
 {
   if (g_topline + 5 > g_cursor_line)
   {
@@ -390,6 +399,8 @@ void OnCurrsorLineChanged()
   {
     g_topline = (g_cursor_line - g_screen_line_count) + 5;
   }
+
+  g_cursor_col = g_lines[g_cursor_line].last_cursor_pos;
 }
 
 bool IsFileOpen()
@@ -514,6 +525,36 @@ void MoveLineDown()
   *b = tmp;
 
   g_cursor_line += 1;
+}
+
+void Copy() {} // lol no selection yet....
+
+void Paste()
+{
+  // string owned by platform host (glfw, sdl, ...)
+  const char *paste_text = GetClipboardText();
+  if (paste_text == NULL)
+    return;
+
+  size_t paste_len = strlen(paste_text);
+
+  for (size_t i = 0; i < paste_len; i++)
+  {
+    if (paste_text[i] == '\n')
+    {
+      EnterKeyPressed();
+    }
+    else if (paste_text[i] == '\r')
+    {
+      // just ignore it...
+    }
+    else
+    {
+      InsertCharAtCurrsor(paste_text[i]);
+    }
+  }
+
+  DoSyntaxHighlighting();
 }
 
 int main(int argc, char *argv[])
@@ -671,6 +712,14 @@ int main(int argc, char *argv[])
         {
           JumpCursorToRight();
         }
+        else if (IsKeyPressed(KEY_V) || IsKeyPressedRepeat(KEY_V))
+        {
+          Paste();
+        }
+        else if (IsKeyPressed(KEY_C) || IsKeyPressedRepeat(KEY_C))
+        {
+          Copy();
+        }
         // else if (IsKeyPressed(KEY_Z))
         // {
         //   Undo();
@@ -696,9 +745,10 @@ int main(int argc, char *argv[])
 
         if (IsKeyPressed(KEY_PAGE_UP) || IsKeyPressedRepeat(KEY_PAGE_UP))
         {
+          PreCurrsorLineChanged();
           g_topline -= g_screen_line_count - 5;
           g_cursor_line -= g_screen_line_count - 5;
-          OnCurrsorLineChanged();
+          PostCurrsorLineChanged();
         }
         else if (IsKeyPressed(KEY_HOME))
         {
@@ -710,19 +760,22 @@ int main(int argc, char *argv[])
         }
         else if (IsKeyPressed(KEY_PAGE_DOWN) || IsKeyPressedRepeat(KEY_PAGE_DOWN))
         {
+          PreCurrsorLineChanged();
           g_topline += g_screen_line_count - 5;
           g_cursor_line += g_screen_line_count - 5;
-          OnCurrsorLineChanged();
+          PostCurrsorLineChanged();
         }
         else if (IsKeyPressed(KEY_UP) || IsKeyPressedRepeat(KEY_UP))
         {
+          PreCurrsorLineChanged();
           g_cursor_line -= 1;
-          OnCurrsorLineChanged();
+          PostCurrsorLineChanged();
         }
         else if (IsKeyPressed(KEY_DOWN) || IsKeyPressedRepeat(KEY_DOWN))
         {
+          PreCurrsorLineChanged();
           g_cursor_line += 1;
-          OnCurrsorLineChanged();
+          PostCurrsorLineChanged();
         }
         else if (IsKeyPressed(KEY_LEFT) || IsKeyPressedRepeat(KEY_LEFT))
         {
