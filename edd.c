@@ -69,7 +69,18 @@ char g_open_file_path[1024] = {0};
 
 bool g_file_changed = false;
 
-// size_t g_sel_start_ln, g_sel_start_col, g_sel_end_ln, g_sel_end_col;
+bool g_is_select = false;
+size_t g_select_start_ln, g_select_start_col,
+    g_select_end_ln, g_select_end_col;
+
+void BeginSelection(), // shift + arrow
+    ClearSelection(),  // escape
+    SelectLeft(),      // shift+left
+    SelectRight(),     // shift+right
+    SelectUp(),        // shift+up
+    SelectDown(),      // shift+down
+    CopySelection(),   // ctrl+c while g_is_select
+    CutSelection();    // ctrl+x while g_is_select
 
 enum Syntax
 {
@@ -527,8 +538,6 @@ void MoveLineDown()
   g_cursor_line += 1;
 }
 
-void Copy() {} // lol no selection yet....
-
 void Paste()
 {
   // string owned by platform host (glfw, sdl, ...)
@@ -718,8 +727,13 @@ int main(int argc, char *argv[])
         }
         else if (IsKeyPressed(KEY_C) || IsKeyPressedRepeat(KEY_C))
         {
-          Copy();
+          CopySelection();
         }
+        else if (IsKeyPressed(KEY_X) || IsKeyPressedRepeat(KEY_X))
+        {
+          CutSelection();
+        }
+
         // else if (IsKeyPressed(KEY_Z))
         // {
         //   Undo();
@@ -749,6 +763,30 @@ int main(int argc, char *argv[])
           g_topline -= g_screen_line_count - 5;
           g_cursor_line -= g_screen_line_count - 5;
           PostCurrsorLineChanged();
+        }
+        else if (IsKeyPressed(KEY_UP) && (IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT)))
+        {
+          if (!g_is_select)
+            BeginSelection();
+          SelectUp();
+        }
+        else if (IsKeyPressed(KEY_DOWN) && (IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT)))
+        {
+          if (!g_is_select)
+            BeginSelection();
+          SelectDown();
+        }
+        else if (IsKeyPressed(KEY_LEFT) && (IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT)))
+        {
+          if (!g_is_select)
+            BeginSelection();
+          SelectLeft();
+        }
+        else if (IsKeyPressed(KEY_RIGHT) && (IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT)))
+        {
+          if (!g_is_select)
+            BeginSelection();
+          SelectRight();
         }
         else if (IsKeyPressed(KEY_HOME))
         {
@@ -804,6 +842,10 @@ int main(int argc, char *argv[])
           {
             InsertCharAtCurrsor(' ');
           }
+        }
+        else if (IsKeyPressed(KEY_ESCAPE) && g_is_select)
+        {
+          ClearSelection();
         }
         else
         {
@@ -1005,7 +1047,20 @@ int main(int argc, char *argv[])
       int status_y = GetScreenHeight() - g_font_height;
       DrawRectangle(0, status_y, GetScreenWidth(), g_font_height, (Color){0xd8, 0xd4, 0xc4, 0xff});
       // DrawTextCodepoint(g_font, '~' + 11, (Vector2){10, status_y}, g_font_size, BLACK);
-      DrawTextEx(g_font, TextFormat("Font Size %.0f", g_font_height), (Vector2){10, status_y}, g_font_height, g_font_spacing, BLACK);
+      const char *fontsz_msg = TextFormat("Font Size %.0f", g_font_height);
+      DrawTextEx(g_font, fontsz_msg, (Vector2){10, status_y}, g_font_height, g_font_spacing, BLACK);
+
+      // if (g_is_select)
+      {
+        Vector2 measure = MeasureTextEx2(fontsz_msg, strlen(fontsz_msg));
+        DrawTextEx(g_font,
+                   TextFormat("Select: %lu:%lu - %lu:%lu", g_select_start_ln, g_select_start_col, g_select_end_ln, g_select_end_col),
+                   (Vector2){20 + measure.x, status_y},
+                   g_font_height,
+                   g_font_spacing,
+                   BLACK);
+        //
+      }
     }
 
     // DrawText(TextFormat("TOP IDX: %d\n%u\n%f\n%f", g_topline, redraw_count, cy,
@@ -1021,6 +1076,39 @@ EXIT:
 
   return 0;
 }
+
+void BeginSelection()
+{
+  g_is_select = true;
+
+  g_select_start_col = g_cursor_col;
+  g_select_start_ln = g_cursor_line;
+  g_select_end_col = g_cursor_col;
+  g_select_end_ln = g_cursor_line;
+}
+
+void ClearSelection()
+{
+  g_is_select = false;
+  g_select_end_col = g_select_end_ln = g_select_start_ln = g_select_start_col = 0;
+}
+
+/*
+
+When you are selecting, we are making a box around some text, based on Start col and line, along with a end col and line,
+The user modifying the selection box is based on them holding shift, and then bumping into the left(start), and right(end)
+of the line.
+
+*/
+
+void SelectLeft() {}
+void SelectUp() {}
+
+void SelectRight() {}
+void SelectDown() {}
+
+void CopySelection() {}
+void CutSelection() {}
 
 // Measure string size for Font
 Vector2 MeasureTextEx2(const char *text, size_t text_len)
