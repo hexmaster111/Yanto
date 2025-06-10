@@ -764,25 +764,25 @@ int main(int argc, char *argv[])
           g_cursor_line -= g_screen_line_count - 5;
           PostCurrsorLineChanged();
         }
-        else if (IsKeyPressed(KEY_UP) && (IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT)))
+        else if ((IsKeyPressed(KEY_UP) || IsKeyPressedRepeat(KEY_UP)) && (IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT)))
         {
           if (!g_is_select)
             BeginSelection();
           SelectUp();
         }
-        else if (IsKeyPressed(KEY_DOWN) && (IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT)))
+        else if ((IsKeyPressed(KEY_DOWN) || IsKeyPressedRepeat(KEY_DOWN)) && (IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT)))
         {
           if (!g_is_select)
             BeginSelection();
           SelectDown();
         }
-        else if (IsKeyPressed(KEY_LEFT) && (IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT)))
+        else if ((IsKeyPressed(KEY_LEFT) || IsKeyPressedRepeat(KEY_LEFT)) && (IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT)))
         {
           if (!g_is_select)
             BeginSelection();
           SelectLeft();
         }
-        else if (IsKeyPressed(KEY_RIGHT) && (IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT)))
+        else if ((IsKeyPressed(KEY_RIGHT) || IsKeyPressedRepeat(KEY_RIGHT)) && (IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT)))
         {
           if (!g_is_select)
             BeginSelection();
@@ -1054,7 +1054,7 @@ int main(int argc, char *argv[])
       {
         Vector2 measure = MeasureTextEx2(fontsz_msg, strlen(fontsz_msg));
         DrawTextEx(g_font,
-                   TextFormat("Select: %lu:%lu - %lu:%lu", g_select_start_ln, g_select_start_col, g_select_end_ln, g_select_end_col),
+                   TextFormat("Select: %lu:%lu - %lu:%lu, cur %lu:%lu", g_select_start_ln, g_select_start_col, g_select_end_ln, g_select_end_col, g_cursor_line, g_cursor_col),
                    (Vector2){20 + measure.x, status_y},
                    g_font_height,
                    g_font_spacing,
@@ -1101,13 +1101,95 @@ of the line.
 
 */
 
-void SelectLeft() {}
-void SelectUp() {}
+void SelectLeft()
+{
+  if (g_cursor_col >= g_select_start_col && g_cursor_col > 0)
+  {
+    g_select_start_col = (g_cursor_col -= 1);
+  }
+}
+
+void SelectUp()
+{
+  if (g_cursor_line > 0)
+  {
+    g_cursor_line = (g_select_start_ln -= 1);
+  }
+}
 
 void SelectRight() {}
 void SelectDown() {}
 
-void CopySelection() {}
+#define MAX(NUMA, NUMB) ((NUMA) > (NUMB) ? (NUMA) : (NUMB))
+#define MIN(NUMA, NUMB) ((NUMA) < (NUMB) ? (NUMA) : (NUMB))
+
+#define TODO(MSG) fprintf(stderr, "TODO %s %s:%d\n", (MSG), __FILE__, __LINE__), abort()
+
+void CopySelection()
+{
+
+  /**
+   * Im not sure how SetClipboardText works... so i am making this buffer static, so that if it dose ref this buffer,
+   * we dont end un-refrencing some stack
+   */
+  static char selected_text[1024] = {0};
+
+  size_t len = 0;
+  size_t linespan = MAX(g_select_start_ln, g_select_end_ln) - MIN(g_select_start_ln, g_select_end_ln);
+  size_t curline = g_select_start_ln;
+
+  // copy a whole line
+  if (g_select_start_ln == 0 && g_select_end_ln == 0 && g_select_start_col == 0 && g_select_end_col == 0)
+  {
+    SetClipboardText(TextFormat("%*s\n", g_lines[g_cursor_line].len, g_lines[g_cursor_line].base));
+    return;
+  }
+
+  // copy appart of a single line
+  if (linespan == 0)
+  {
+    struct Line line = g_lines[g_cursor_line];
+    const char *start = line.base + g_select_start_col;
+
+    for (size_t i = 0; i < MIN(g_select_end_col - g_select_start_col, sizeof(selected_text)); i++)
+    {
+      selected_text[i] = start[i];
+    }
+
+    SetClipboardText(selected_text);
+    return;
+  }
+
+  // TODO("Copy multi-lines");
+
+  int select_buf = 0;
+  do
+  {
+    struct Line l = g_lines[curline];
+    printf("%s\n", l.base ? l.base : "(null)");
+
+    if (curline == g_select_start_ln)
+    {
+      // select_start_col -> end of line
+      /* we have to copy a chunk of the first line  */
+      memcpy(selected_text + select_buf, l.base + g_select_start_col,  l.len - g_select_start_col);
+      select_buf += l.len - g_select_start_col;
+
+    }
+    else if (curline == g_select_end_ln)
+    {
+      // 0 -> select_end_col
+      /* we have to copy a chunk of the end line */
+    }
+    else
+    {
+      /* we just have to copy this whole line */
+    }
+
+    curline++;
+  } while (curline < g_select_end_ln);
+}
+
 void CutSelection() {}
 
 // Measure string size for Font
