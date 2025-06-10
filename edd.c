@@ -1124,6 +1124,8 @@ void SelectDown() {}
 #define MIN(NUMA, NUMB) ((NUMA) < (NUMB) ? (NUMA) : (NUMB))
 
 #define TODO(MSG) fprintf(stderr, "TODO %s %s:%d\n", (MSG), __FILE__, __LINE__), abort()
+#define ASSERT(COND)  if(!(COND)) fprintf(stderr, "ASSERTION FAILED \'%s\' @ %s:%d", #COND, __FILE__, __LINE__), abort()
+
 
 void CopySelection()
 {
@@ -1132,7 +1134,8 @@ void CopySelection()
    * Im not sure how SetClipboardText works... so i am making this buffer static, so that if it dose ref this buffer,
    * we dont end un-refrencing some stack
    */
-  static char selected_text[1024] = {0};
+  static char sel_buffer[1024];
+  memset(sel_buffer, 0, sizeof(sel_buffer));
 
   size_t len = 0;
   size_t linespan = MAX(g_select_start_ln, g_select_end_ln) - MIN(g_select_start_ln, g_select_end_ln);
@@ -1151,18 +1154,18 @@ void CopySelection()
     struct Line line = g_lines[g_cursor_line];
     const char *start = line.base + g_select_start_col;
 
-    for (size_t i = 0; i < MIN(g_select_end_col - g_select_start_col, sizeof(selected_text)); i++)
+    for (size_t i = 0; i < MIN(g_select_end_col - g_select_start_col, sizeof(sel_buffer)); i++)
     {
-      selected_text[i] = start[i];
+      sel_buffer[i] = start[i];
     }
 
-    SetClipboardText(selected_text);
+    SetClipboardText(sel_buffer);
     return;
   }
 
   // TODO("Copy multi-lines");
 
-  int select_buf = 0;
+  int buff_pos = 0;
   do
   {
     struct Line l = g_lines[curline];
@@ -1172,22 +1175,39 @@ void CopySelection()
     {
       // select_start_col -> end of line
       /* we have to copy a chunk of the first line  */
-      memcpy(selected_text + select_buf, l.base + g_select_start_col,  l.len - g_select_start_col);
-      select_buf += l.len - g_select_start_col;
 
+      char *buffer_view = sel_buffer + buff_pos;
+      char *line_start = l.base + g_select_start_col;
+      int select_length = l.len - g_select_start_col;
+
+      ASSERT(select_length > 0);
+
+      memcpy(buffer_view, line_start, select_length);
+      buff_pos += l.len - g_select_start_col;
+      buffer_view[buff_pos] = '\n';
+      buff_pos += 1;
+      
     }
     else if (curline == g_select_end_ln)
     {
       // 0 -> select_end_col
       /* we have to copy a chunk of the end line */
+      TODO("Copy the last part of the multi line");
     }
     else
     {
       /* we just have to copy this whole line */
+      memcpy(sel_buffer + buff_pos, l.base, l.len);
+      buff_pos += l.len;
+      sel_buffer[buff_pos] = '\n';
+      buff_pos += 1;
     }
 
     curline++;
   } while (curline < g_select_end_ln);
+
+  if (buff_pos)
+    SetClipboardText(sel_buffer);
 }
 
 void CutSelection() {}
