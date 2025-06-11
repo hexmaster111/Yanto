@@ -1,11 +1,10 @@
 /* and this one is small but big */ size_t i_should_highlight = 0;
 int i = 0;   /*turkies are known for there int and size_t usage */
-
- /*
-  * this is a comment with some keywords for testing that the highlighting
-  * is disabled while we are in multi-line comments.
-  */
-
+ 
+/*
+ * this is a comment with some keywords for testing that the highlighting
+ * is disabled while we are in multi-line comments.
+ */
 
 // WARNING: Turkies are evil, they eat bugs
 // NOTICE: Only bugs think that
@@ -40,6 +39,7 @@ char c = 'c';
 char z = '\0';
 
 int something = 10;
+
 
 
 

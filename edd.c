@@ -81,8 +81,7 @@ bool g_is_select = false;
 size_t g_select_start_ln, g_select_start_col, // start is like anchor
     g_select_end_ln, g_select_end_col;        // end is like where the user ended up
 
-void 
-    DelSelectedText(),
+void DelSelectedText(),
     BeginSelection(), // shift + arrow
     ClearSelection(), // escape
     SelectLeft(),     // shift+left
@@ -546,7 +545,7 @@ void JumpCursor(int dir, const char *stop_at)
 DONE:;
 }
 
-const char *jump_stops = " {}()<>\"\',;";
+const char *jump_stops = " #@{}()<>\"\',;";
 void JumpCursorToLeft() { JumpCursor(-1, jump_stops); }
 void JumpCursorToRight() { JumpCursor(1, jump_stops); }
 void HomeCursor() { JumpCursor(-1, NULL); }
@@ -610,7 +609,7 @@ void Paste()
     }
   }
 
-  // DoSyntaxHighlighting();
+  DoSyntaxHighlighting();
 }
 
 int main(int argc, char *argv[])
@@ -1277,7 +1276,12 @@ char *GetSelectedText()
   buffer[0] = '\0';
 
   if (!g_is_select)
+  {
+    struct Line line = g_lines[g_cursor_line];
+    strncpy(buffer, line.base, MIN(line.len, sizeof(buffer) - 1));
+    buffer[MIN(line.len, sizeof(buffer) - 1)] = '\0';
     return buffer;
+  }
 
   size_t start_ln = g_select_start_ln;
   size_t start_col = g_select_start_col;
@@ -1324,10 +1328,27 @@ char *GetSelectedText()
   return buffer;
 }
 
+/* Deletes selected text or current line if no text is selected (for cut) */
 void DelSelectedText()
 {
   if (!g_is_select)
+  {
+    struct Line *line = &g_lines[g_cursor_line];
+    free(line->base);
+    free(line->style);
+
+    for (size_t i = g_cursor_line; i < g_lines_count - 1; i++)
+    {
+      g_lines[i] = g_lines[i + 1];
+    }
+    g_lines_count--;
+    if (g_cursor_line >= g_lines_count && g_lines_count > 0)
+      g_cursor_line = g_lines_count - 1;
+    g_cursor_col = 0;
+    g_file_changed = true;
+    DoSyntaxHighlighting();
     return;
+  }
 
   size_t start_ln = g_select_start_ln;
   size_t start_col = g_select_start_col;
@@ -1408,7 +1429,6 @@ void CutSelection()
   SetClipboardText(GetSelectedText());
   DelSelectedText();
 }
-
 
 // Measure string size for Font
 Vector2 MeasureTextEx2(const char *text, size_t text_len)
