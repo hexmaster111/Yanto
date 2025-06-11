@@ -29,6 +29,14 @@
 #define COLOR_DEFAULT (C_Black)
 #define COLOR_KEYWORD (C_Blue)
 
+#define MAX(NUMA, NUMB) ((NUMA) > (NUMB) ? (NUMA) : (NUMB))
+#define MIN(NUMA, NUMB) ((NUMA) < (NUMB) ? (NUMA) : (NUMB))
+
+#define TODO(MSG) fprintf(stderr, "TODO %s %s:%d\n", (MSG), __FILE__, __LINE__), abort()
+#define ASSERT(COND) \
+  if (!(COND))       \
+  fprintf(stderr, "ASSERTION FAILED \'%s\' @ %s:%d", #COND, __FILE__, __LINE__), abort()
+
 Vector2 MeasureTextEx2(const char *text, size_t text_len);
 void PostCurrsorLineChanged();
 
@@ -70,17 +78,19 @@ char g_open_file_path[1024] = {0};
 bool g_file_changed = false;
 
 bool g_is_select = false;
-size_t g_select_start_ln, g_select_start_col,
-    g_select_end_ln, g_select_end_col;
+size_t g_select_start_ln, g_select_start_col, // start is like anchor
+    g_select_end_ln, g_select_end_col;        // end is like where the user ended up
 
-void BeginSelection(), // shift + arrow
-    ClearSelection(),  // escape
-    SelectLeft(),      // shift+left
-    SelectRight(),     // shift+right
-    SelectUp(),        // shift+up
-    SelectDown(),      // shift+down
-    CopySelection(),   // ctrl+c while g_is_select
-    CutSelection();    // ctrl+x while g_is_select
+void 
+    DelSelectedText(),
+    BeginSelection(), // shift + arrow
+    ClearSelection(), // escape
+    SelectLeft(),     // shift+left
+    SelectRight(),    // shift+right
+    SelectUp(),       // shift+up
+    SelectDown(),     // shift+down
+    CopySelection(),  // ctrl+c while g_is_select
+    CutSelection();   // ctrl+x while g_is_select
 
 enum Syntax
 {
@@ -182,11 +192,20 @@ void RemoveChar(char *str, size_t str_len, int pos)
 
 void BackspaceKeyPressed()
 {
+  if (g_is_select)
+  {
+    DelSelectedText();
+    return;
+  }
+
   struct Line *l = &g_lines[g_cursor_line];
 
   if (0 >= l->len && 0 < g_cursor_line)
   { // remove this line with no splicing and line shift lines up
     free(l->base);
+    free(l->style);
+    l->base = NULL;
+    l->style = NULL;
 
     for (size_t i = g_cursor_line; i < g_lines_count - 1; i++)
     {
@@ -210,12 +229,16 @@ void BackspaceKeyPressed()
     {
       prev_line->cap = new_len;
       prev_line->base = realloc(prev_line->base, prev_line->cap);
+      prev_line->style = realloc(prev_line->style, prev_line->cap);
     }
 
     memcpy(prev_line->base + prev_line->len, l->base, l->len);
     prev_line->len = new_len;
 
     free(l->base);
+    free(l->style);
+    l->base = NULL;
+    l->style = NULL;
 
     for (size_t i = g_cursor_line; i < g_lines_count - 1; i++)
     {
@@ -245,6 +268,9 @@ void DeleteKeyPressed()
   if (0 >= l->len)
   { // remove this line with no splicing
     free(l->base);
+    free(l->style);
+    l->base = NULL;
+    l->style = NULL;
 
     for (size_t i = g_cursor_line; i < g_lines_count - 1; i++)
     {
@@ -265,12 +291,16 @@ void DeleteKeyPressed()
     {
       l->cap = new_len;
       l->base = realloc(l->base, l->cap);
+      l->style = realloc(l->style, l->cap);
     }
 
     memcpy(l->base + l->len, next_line->base, next_line->len);
     l->len = new_len;
 
     free(next_line->base);
+    free(next_line->style);
+    next_line->base = NULL;
+    next_line->style = NULL;
 
     for (size_t i = g_cursor_line + 1; i < g_lines_count - 1; i++)
     {
@@ -310,6 +340,7 @@ void EnterKeyPressed()
     size_t new_line_len = old_line->len - g_cursor_col;
 
     new_line->base = calloc(new_line_len, sizeof(char));
+    new_line->style = calloc(new_line_len, sizeof(char));
     new_line->cap = new_line_len;
     new_line->len = new_line_len;
 
@@ -331,7 +362,7 @@ void InsertCharAtCurrsor(char c)
 {
   struct Line *l = &g_lines[g_cursor_line];
 
-  if (l->len + 1 > l->cap)
+  if (l->len + 1 >= l->cap)
   {
     GrowString(l);
   }
@@ -370,7 +401,7 @@ void OpenTextFile(const char *filepath)
     char *line = lines[i];
     g_lines[i].len = g_lines[i].cap = strlen(line);
     g_lines[i].base = line;
-    g_lines[i].style = malloc(strlen(line));
+    g_lines[i].style = malloc(strlen(line) + 1);
   }
 
   SetWindowTitle(TextFormat("%s - FCON", GetFileName(filepath)));
@@ -401,6 +432,19 @@ void PreCurrsorLineChanged()
 
 void PostCurrsorLineChanged()
 {
+
+  // Range check for g_cursor_line
+  if (g_cursor_line < 0)
+    g_cursor_line = 0;
+  if (g_cursor_line >= g_lines_count)
+    g_cursor_line = g_lines_count - 1;
+
+  // Range check for g_cursor_col
+  if (g_cursor_col < 0)
+    g_cursor_col = 0;
+  if (g_cursor_col > g_lines[g_cursor_line].len)
+    g_cursor_col = g_lines[g_cursor_line].len;
+
   if (g_topline + 5 > g_cursor_line)
   {
     g_topline = g_cursor_line - 5;
@@ -410,6 +454,9 @@ void PostCurrsorLineChanged()
   {
     g_topline = (g_cursor_line - g_screen_line_count) + 5;
   }
+
+  if (g_cursor_line <= g_lines_count || 0 > g_cursor_line)
+    return;
 
   g_cursor_col = g_lines[g_cursor_line].last_cursor_pos;
 }
@@ -479,10 +526,8 @@ void JumpCursor(int dir, const char *stop_at)
     g_cursor_col = l.len;
 
   while (g_cursor_col > 0 &&
-         g_cursor_col < l.len)
+         g_cursor_col <= l.len)
   {
-    g_cursor_col += dir;
-
     if (!stop_at)
       continue; // only stop at eol or sol
 
@@ -495,6 +540,8 @@ void JumpCursor(int dir, const char *stop_at)
         goto DONE;
       }
     }
+
+    g_cursor_col += dir;
   }
 DONE:;
 }
@@ -563,7 +610,7 @@ void Paste()
     }
   }
 
-  DoSyntaxHighlighting();
+  // DoSyntaxHighlighting();
 }
 
 int main(int argc, char *argv[])
@@ -801,6 +848,7 @@ int main(int argc, char *argv[])
           PreCurrsorLineChanged();
           g_topline += g_screen_line_count - 5;
           g_cursor_line += g_screen_line_count - 5;
+
           PostCurrsorLineChanged();
         }
         else if (IsKeyPressed(KEY_UP) || IsKeyPressedRepeat(KEY_UP))
@@ -963,15 +1011,15 @@ int main(int argc, char *argv[])
         if (i >= g_lines_count)
           break;
 
-        for (size_t c = 0; c < g_lines[i].len; c++)
+        struct Line l = g_lines[i];
+
+        for (size_t c = 0; c < l.len; c++)
         {
           Color color = BLACK;
 
-          if (g_lines[i].style)
+          switch (l.style[c])
           {
-            switch (g_lines[i].style[c])
-            {
-              // clang-format off
+            // clang-format off
               case C_Black  : color = rgb(0, 0, 0);       break;
               case C_Blue   : color = rgb(0, 121, 241);   break;
               case C_Brick  : color = rgb(203, 75, 22);   break;
@@ -980,11 +1028,58 @@ int main(int argc, char *argv[])
               case C_Gray   : color = rgb(156, 156, 156); break;
               case C_Teal   : color = rgb(42, 161, 152);  break;
               case C_Red    : color = rgb(221, 15, 15);   break;
-              // clang-format on
-            }
+            // clang-format on
           }
 
-          FDrawText(TextFormat("%c", g_lines[i].base[c]),
+          if (g_is_select)
+          {
+            bool do_hl = false;
+
+            if (g_select_start_ln != g_select_end_ln || g_select_start_col != g_select_end_col)
+            {
+              // Normalize selection order
+              size_t sel_start_ln = g_select_start_ln;
+              size_t sel_start_col = g_select_start_col;
+              size_t sel_end_ln = g_select_end_ln;
+              size_t sel_end_col = g_select_end_col;
+              if (sel_start_ln > sel_end_ln || (sel_start_ln == sel_end_ln && sel_start_col > sel_end_col))
+              {
+                size_t tmp;
+                tmp = sel_start_ln;
+                sel_start_ln = sel_end_ln;
+                sel_end_ln = tmp;
+                tmp = sel_start_col;
+                sel_start_col = sel_end_col;
+                sel_end_col = tmp;
+              }
+              if (i > sel_start_ln && i < sel_end_ln)
+              {
+                do_hl = true;
+              }
+              else if (i == sel_start_ln && i == sel_end_ln)
+              {
+                if (c >= sel_start_col && c < sel_end_col)
+                  do_hl = true;
+              }
+              else if (i == sel_start_ln)
+              {
+                if (c >= sel_start_col)
+                  do_hl = true;
+              }
+              else if (i == sel_end_ln)
+              {
+                if (c < sel_end_col)
+                  do_hl = true;
+              }
+            }
+
+            if (do_hl)
+              DrawRectangle(effective_font_width * (LINE_NUMBERS_SUPPORTED + 2 + c),
+                            (i - g_topline) * g_font_height,
+                            effective_font_width, g_font_height, rgb(150, 229, 248));
+          }
+
+          FDrawText(TextFormat("%c", l.base[c]),
                     effective_font_width * (LINE_NUMBERS_SUPPORTED + 2 + c),
                     (i - g_topline) * g_font_height, color);
         }
@@ -1054,7 +1149,7 @@ int main(int argc, char *argv[])
       {
         Vector2 measure = MeasureTextEx2(fontsz_msg, strlen(fontsz_msg));
         DrawTextEx(g_font,
-                   TextFormat("Select: %lu:%lu - %lu:%lu, cur %lu:%lu", g_select_start_ln, g_select_start_col, g_select_end_ln, g_select_end_col, g_cursor_line, g_cursor_col),
+                   TextFormat("Select: start:%lu:%lu  end:%lu:%lu, cur %lu:%lu", g_select_start_ln, g_select_start_col, g_select_end_ln, g_select_end_col, g_cursor_line, g_cursor_col),
                    (Vector2){20 + measure.x, status_y},
                    g_font_height,
                    g_font_spacing,
@@ -1103,114 +1198,217 @@ of the line.
 
 void SelectLeft()
 {
-  if (g_cursor_col >= g_select_start_col && g_cursor_col > 0)
+  if (!g_is_select)
+    return;
+
+  if (g_cursor_col > 0)
   {
-    g_select_start_col = (g_cursor_col -= 1);
+    g_cursor_col--;
   }
+  else if (g_cursor_line > 0)
+  {
+    g_cursor_line--;
+    g_cursor_col = g_lines[g_cursor_line].len;
+  }
+
+  g_select_end_col = g_cursor_col;
+  g_select_end_ln = g_cursor_line;
 }
 
 void SelectUp()
 {
+  if (!g_is_select)
+    return;
+
   if (g_cursor_line > 0)
   {
-    g_cursor_line = (g_select_start_ln -= 1);
+    g_cursor_line--;
+    size_t line_len = g_lines[g_cursor_line].len;
+    if (g_cursor_col > line_len)
+      g_cursor_col = line_len;
   }
+
+  g_select_end_col = g_cursor_col;
+  g_select_end_ln = g_cursor_line;
 }
 
-void SelectRight() {}
-void SelectDown() {}
-
-#define MAX(NUMA, NUMB) ((NUMA) > (NUMB) ? (NUMA) : (NUMB))
-#define MIN(NUMA, NUMB) ((NUMA) < (NUMB) ? (NUMA) : (NUMB))
-
-#define TODO(MSG) fprintf(stderr, "TODO %s %s:%d\n", (MSG), __FILE__, __LINE__), abort()
-#define ASSERT(COND)  if(!(COND)) fprintf(stderr, "ASSERTION FAILED \'%s\' @ %s:%d", #COND, __FILE__, __LINE__), abort()
-
-
-void CopySelection()
+void SelectRight()
 {
-
-  /**
-   * Im not sure how SetClipboardText works... so i am making this buffer static, so that if it dose ref this buffer,
-   * we dont end un-refrencing some stack
-   */
-  static char sel_buffer[1024];
-  memset(sel_buffer, 0, sizeof(sel_buffer));
-
-  size_t len = 0;
-  size_t linespan = MAX(g_select_start_ln, g_select_end_ln) - MIN(g_select_start_ln, g_select_end_ln);
-  size_t curline = g_select_start_ln;
-
-  // copy a whole line
-  if (g_select_start_ln == 0 && g_select_end_ln == 0 && g_select_start_col == 0 && g_select_end_col == 0)
-  {
-    SetClipboardText(TextFormat("%*s\n", g_lines[g_cursor_line].len, g_lines[g_cursor_line].base));
+  if (!g_is_select)
     return;
+
+  struct Line *line = &g_lines[g_cursor_line];
+
+  if (g_cursor_col < line->len)
+  {
+    g_cursor_col++;
+  }
+  else if (g_cursor_line + 1 < g_lines_count)
+  {
+    g_cursor_line++;
+    g_cursor_col = 0;
   }
 
-  // copy appart of a single line
-  if (linespan == 0)
-  {
-    struct Line line = g_lines[g_cursor_line];
-    const char *start = line.base + g_select_start_col;
-
-    for (size_t i = 0; i < MIN(g_select_end_col - g_select_start_col, sizeof(sel_buffer)); i++)
-    {
-      sel_buffer[i] = start[i];
-    }
-
-    SetClipboardText(sel_buffer);
-    return;
-  }
-
-  // TODO("Copy multi-lines");
-
-  int buff_pos = 0;
-  do
-  {
-    struct Line l = g_lines[curline];
-    printf("%s\n", l.base ? l.base : "(null)");
-
-    if (curline == g_select_start_ln)
-    {
-      // select_start_col -> end of line
-      /* we have to copy a chunk of the first line  */
-
-      char *buffer_view = sel_buffer + buff_pos;
-      char *line_start = l.base + g_select_start_col;
-      int select_length = l.len - g_select_start_col;
-
-      ASSERT(select_length > 0);
-
-      memcpy(buffer_view, line_start, select_length);
-      buff_pos += l.len - g_select_start_col;
-      buffer_view[buff_pos] = '\n';
-      buff_pos += 1;
-      
-    }
-    else if (curline == g_select_end_ln)
-    {
-      // 0 -> select_end_col
-      /* we have to copy a chunk of the end line */
-      TODO("Copy the last part of the multi line");
-    }
-    else
-    {
-      /* we just have to copy this whole line */
-      memcpy(sel_buffer + buff_pos, l.base, l.len);
-      buff_pos += l.len;
-      sel_buffer[buff_pos] = '\n';
-      buff_pos += 1;
-    }
-
-    curline++;
-  } while (curline < g_select_end_ln);
-
-  if (buff_pos)
-    SetClipboardText(sel_buffer);
+  g_select_end_col = g_cursor_col;
+  g_select_end_ln = g_cursor_line;
 }
 
-void CutSelection() {}
+void SelectDown()
+{
+  if (!g_is_select)
+    return;
+
+  if (g_cursor_line + 1 < g_lines_count)
+  {
+    g_cursor_line++;
+    size_t line_len = g_lines[g_cursor_line].len;
+    if (g_cursor_col > line_len)
+      g_cursor_col = line_len;
+  }
+
+  g_select_end_col = g_cursor_col;
+  g_select_end_ln = g_cursor_line;
+}
+
+// @returns A pointer to a static buffer.
+char *GetSelectedText()
+{
+  static char buffer[4096];
+  buffer[0] = '\0';
+
+  if (!g_is_select)
+    return buffer;
+
+  size_t start_ln = g_select_start_ln;
+  size_t start_col = g_select_start_col;
+  size_t end_ln = g_select_end_ln;
+  size_t end_col = g_select_end_col;
+
+  // Normalize selection order
+  if (start_ln > end_ln || (start_ln == end_ln && start_col > end_col))
+  {
+    size_t tmp;
+    tmp = start_ln;
+    start_ln = end_ln;
+    end_ln = tmp;
+    tmp = start_col;
+    start_col = end_col;
+    end_col = tmp;
+  }
+
+  size_t pos = 0;
+  for (size_t ln = start_ln; ln <= end_ln; ln++)
+  {
+    struct Line *line = &g_lines[ln];
+    size_t col_start = (ln == start_ln) ? start_col : 0;
+    size_t col_end = (ln == end_ln) ? end_col : line->len;
+
+    if (col_end > line->len)
+      col_end = line->len;
+    if (col_start > col_end)
+      col_start = col_end;
+
+    size_t len = col_end - col_start;
+    if (pos + len >= sizeof(buffer) - 2)
+      break;
+
+    memcpy(buffer + pos, line->base + col_start, len);
+    pos += len;
+
+    if (ln != end_ln && pos < sizeof(buffer) - 2)
+    {
+      buffer[pos++] = '\n';
+    }
+  }
+  buffer[pos] = '\0';
+  return buffer;
+}
+
+void DelSelectedText()
+{
+  if (!g_is_select)
+    return;
+
+  size_t start_ln = g_select_start_ln;
+  size_t start_col = g_select_start_col;
+  size_t end_ln = g_select_end_ln;
+  size_t end_col = g_select_end_col;
+
+  // Normalize selection order
+  if (start_ln > end_ln || (start_ln == end_ln && start_col > end_col))
+  {
+    size_t tmp;
+    tmp = start_ln;
+    start_ln = end_ln;
+    end_ln = tmp;
+    tmp = start_col;
+    start_col = end_col;
+    end_col = tmp;
+  }
+
+  if (start_ln == end_ln)
+  {
+    struct Line *line = &g_lines[start_ln];
+    if (end_col > line->len)
+      end_col = line->len;
+    if (start_col > end_col)
+      start_col = end_col;
+    memmove(line->base + start_col, line->base + end_col, line->len - end_col);
+    line->len -= (end_col - start_col);
+  }
+  else
+  {
+    // Remove from start line
+    struct Line *start_line = &g_lines[start_ln];
+    if (start_col < start_line->len)
+      start_line->len = start_col;
+
+    // Remove from end line
+    struct Line *end_line = &g_lines[end_ln];
+    size_t remain = 0;
+    if (end_col < end_line->len)
+      remain = end_line->len - end_col;
+
+    // Concatenate remaining part of end_line to start_line
+    if (remain > 0)
+    {
+      if (start_line->len + remain > start_line->cap)
+      {
+        start_line->cap = start_line->len + remain;
+        start_line->base = realloc(start_line->base, start_line->cap);
+      }
+      memcpy(start_line->base + start_line->len, end_line->base + end_col, remain);
+      start_line->len += remain;
+    }
+
+    // Remove lines in between
+    for (size_t i = start_ln + 1; i <= end_ln; i++)
+    {
+      free(g_lines[i].base);
+      free(g_lines[i].style);
+    }
+    memmove(&g_lines[start_ln + 1], &g_lines[end_ln + 1], (g_lines_count - end_ln - 1) * sizeof(struct Line));
+    g_lines_count -= (end_ln - start_ln);
+
+    // Fix cursor position
+    g_cursor_line = start_ln;
+    g_cursor_col = start_col;
+  }
+
+  g_is_select = false;
+  g_select_end_col = g_select_end_ln = g_select_start_ln = g_select_start_col = 0;
+  g_file_changed = true;
+  DoSyntaxHighlighting();
+}
+
+void CopySelection() { SetClipboardText(GetSelectedText()); }
+
+void CutSelection()
+{
+  SetClipboardText(GetSelectedText());
+  DelSelectedText();
+}
+
 
 // Measure string size for Font
 Vector2 MeasureTextEx2(const char *text, size_t text_len)

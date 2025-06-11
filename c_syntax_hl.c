@@ -40,11 +40,14 @@ bool CReadWordFromLine(
 {
   *wstart = 0, *wend = 0;
 
-  if (line[*pos] == '\0')
+  if (*pos >= linelen || line[*pos] == '\0')
     return false;
 
   while (isspace(line[*pos]) && line[*pos] != '\0')
     *pos += 1; // skips whitespace
+
+  if (*pos >= linelen || line[*pos] == '\0')
+    return false;
 
   size_t start = *pos;
 
@@ -63,11 +66,17 @@ bool CReadWordFromLine(
     }
 
     *pos += 1;
+
+    if (*pos >= linelen || line[*pos] == '\0')
+      return false;
   }
 
 SEARCH_DONE:
   *wstart = start;
   *wend = *pos;
+
+  if (*pos >= linelen || line[*pos] == '\0')
+    return false;
 
   if (line[*pos] != '\0') // skip what we hit
     *pos += 1;
@@ -77,6 +86,7 @@ SEARCH_DONE:
 
 void DoCSyntaxHighlighing()
 {
+  // return;
   bool in_multiline_comment = false;
 
   // if syntax highlighing is too taxing, perhaps only re-computing hl for visable lines is in order
@@ -86,12 +96,12 @@ void DoCSyntaxHighlighing()
 
     struct Line l = g_lines[i];
 
-    if (!l.base || !l.style)
+    if (!l.base || !l.style || l.len == 0)
       continue; // this line is empty
 
     size_t pos = 0;
     char last = ' ';
-    memset(l.style, COLOR_DEFAULT, l.cap);
+    memset(l.style, COLOR_DEFAULT, l.len);
     size_t wstart = 0, wend = 0;
     // handles keywords and lang words
     while (CReadWordFromLine(c_word_sepprators, l.base, l.len, &wstart, &wend, &pos))
@@ -193,6 +203,10 @@ void DoCSyntaxHighlighing()
     // handles string / char lits / imports
     while (CReadWordFromLine(c_string_sep, l.base, l.len, &wstart, &wend, &pos))
     {
+      // Ensure we do not access out-of-bounds memory
+      if (wstart == 0 || (wstart + (wend - wstart)) > l.len)
+        continue;
+
       size_t len = (wend - wstart) + 2;
       const char *wrd = l.base + wstart - 1;
       char cs = '\0';
@@ -208,15 +222,19 @@ void DoCSyntaxHighlighing()
         if (!cs)
           break;
 
-        if (cs != '<' && cs != '>' && *wrd == cs && *(wrd + len - 1) == cs)
+        // Check bounds before dereferencing
+        if ((wstart - 1) < l.len && (wstart - 1) < l.cap && (wstart + (wend - wstart)) < l.len)
         {
-          memset(l.style + wstart - 1, COLOR_STRCHAR, len);
-          goto WORD_DONE_;
-        }
-        else if (*wrd == '<' && *(wrd + len - 1) == '>')
-        {
-          memset(l.style + wstart - 1, COLOR_STRCHAR, len);
-          goto WORD_DONE_;
+          if (cs != '<' && cs != '>' && *wrd == cs && *(wrd + len - 1) == cs)
+          {
+            memset(l.style + wstart - 1, COLOR_STRCHAR, len);
+            goto WORD_DONE_;
+          }
+          else if (*wrd == '<' && *(wrd + len - 1) == '>')
+          {
+            memset(l.style + wstart - 1, COLOR_STRCHAR, len);
+            goto WORD_DONE_;
+          }
         }
       }
 
