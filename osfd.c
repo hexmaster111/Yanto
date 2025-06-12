@@ -150,14 +150,53 @@ TBAction osfd_TextBox(char *text, int textcap, int x, int y, int width, bool sel
     if (selected_for_input)
     {
 
-        if (IsKeyPressed(KEY_LEFT) || IsKeyPressedRepeat(KEY_LEFT))
+        if ((IsKeyPressed(KEY_LEFT) || IsKeyPressedRepeat(KEY_LEFT)) && (IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL)))
+        {
+            while (currsor_pos > 0 && text[currsor_pos - 1] == ' ')
+            {
+                currsor_pos--;
+            }
+            while (currsor_pos > 0 && text[currsor_pos - 1] != ' ')
+            {
+                currsor_pos--;
+            }
+        }
+        else if ((IsKeyPressed(KEY_RIGHT) || IsKeyPressedRepeat(KEY_RIGHT)) && (IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL)))
+        {
+            while (currsor_pos < len && text[currsor_pos] == ' ')
+            {
+                currsor_pos++;
+            }
+            while (currsor_pos < len && text[currsor_pos] != ' ')
+            {
+                currsor_pos++;
+            }
+        }
+        else if (IsKeyPressed(KEY_LEFT) || IsKeyPressedRepeat(KEY_LEFT))
         {
             currsor_pos -= 1;
         }
-
-        if (IsKeyPressed(KEY_RIGHT) || IsKeyPressedRepeat(KEY_LEFT))
+        else if (IsKeyPressed(KEY_RIGHT) || IsKeyPressedRepeat(KEY_LEFT))
         {
             currsor_pos += 1;
+        }
+        else if ((IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL)) && IsKeyDown(KEY_V))
+        {
+            const char *clipboard = GetClipboardText();
+            if (clipboard && clipboard[0] != '\0')
+            {
+                int cliplen = strlen(clipboard);
+                int space_left = textcap - len - 1;
+                if (space_left > 0)
+                {
+                    if (cliplen > space_left)
+                        cliplen = space_left;
+                    memmove(&text[currsor_pos + cliplen], &text[currsor_pos], len - currsor_pos + 1);
+                    memcpy(&text[currsor_pos], clipboard, cliplen);
+                    currsor_pos += cliplen;
+                    len += cliplen;
+                }
+            }
         }
 
         if (currsor_pos > len)
@@ -171,12 +210,36 @@ TBAction osfd_TextBox(char *text, int textcap, int x, int y, int width, bool sel
             currsor_flash = !currsor_flash;
         }
 
-        if (IsKeyPressed(KEY_BACKSPACE) || IsKeyPressedRepeat(KEY_BACKSPACE))
+        if ((IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_LEFT_CONTROL)) && IsKeyPressed(KEY_BACKSPACE))
         {
-            if (len > 0)
+            while (currsor_pos > 0 && len > 0 && text[currsor_pos - 1] == ' ')
             {
-                len -= 1;
-                text[len] = '\0';
+                memmove(&text[currsor_pos - 1], &text[currsor_pos], len - currsor_pos + 1);
+                currsor_pos--;
+                len--;
+            }
+            while (currsor_pos > 0 && len > 0 && text[currsor_pos - 1] != ' ')
+            {
+                memmove(&text[currsor_pos - 1], &text[currsor_pos], len - currsor_pos + 1);
+                currsor_pos--;
+                len--;
+            }
+        }
+        else if (IsKeyPressed(KEY_BACKSPACE) || IsKeyPressedRepeat(KEY_BACKSPACE))
+        {
+            if (currsor_pos > 0 && len > 0)
+            {
+                memmove(&text[currsor_pos - 1], &text[currsor_pos], len - currsor_pos + 1);
+                currsor_pos--;
+                len--;
+            }
+        }
+        else if (IsKeyPressed(KEY_DELETE) || IsKeyPressedRepeat(KEY_DELETE))
+        {
+            if (currsor_pos < len)
+            {
+                memmove(&text[currsor_pos], &text[currsor_pos + 1], len - currsor_pos);
+                len--;
             }
         }
     }
