@@ -934,7 +934,7 @@ void DrawEditor(float x, float y)
 struct PEFile
 {
   bool is_expanded, is_dir;
-  const char *name;
+  char *name; // i must be free'd
 
   struct PEFile *children;
   int children_count;
@@ -946,16 +946,29 @@ struct ProjectExplorer
   int items_count;
 };
 
-/** TODO: Use this to build a projectExploer based on current dir files */
-// struct ProjectExplorer FromDir(const char *dir);
-// FilePathList files = LoadDirectoryFiles(".");
-// for (size_t i = 0; i < files.count; i++)
-// {
-//   printf("%s\n", files.paths[i]);
-// }
-// UnloadDirectoryFiles(files);
+struct ProjectExplorer ProjectExplorerFromDir(const char *dir)
+{
+  size_t len;
+  struct ProjectExplorer ret = {0};
+  FilePathList files = LoadDirectoryFiles(dir);
 
+  ret.items_count = files.count;
+  ret.items = malloc(len = (sizeof(struct PEFile) * files.count));
+  memset(ret.items, 0, len);
 
+  for (size_t i = 0; i < ret.items_count; i++)
+  {
+    ret.items[i].name = malloc(len = strlen(files.paths[i]) + 1 );
+    memcpy(ret.items[i].name, files.paths[i], len);
+    ret.items[i].is_dir = DirectoryExists(ret.items[i].name);
+  }
+
+  /** TODO: I should be recurssive or something to load up things that is_dir  */
+
+  UnloadDirectoryFiles(files);
+
+  return ret;
+}
 
 void _DrawProjectItem(float *x, float *y, float *width, struct PEFile *f)
 {
@@ -1010,30 +1023,33 @@ int main(int argc, char *argv[])
   SetTargetFPS(60);
 
   // clang-format off
-  struct PEFile demo_files[] = {
-      (struct PEFile){.is_dir = false, .is_expanded = false, .name = "main.c"},
-      (struct PEFile){.is_dir = false, .is_expanded = false, .name = "lib.h"},
-      (struct PEFile){.is_dir = false, .is_expanded = false, .name = "lib2.h"},
-      (struct PEFile){ .is_dir = true, .is_expanded = false, .name = "Some Dir", .children_count = 2,  
-        .children = (struct PEFile[]){
-              (struct PEFile){.name = "thingindir.h", .is_dir = false, .is_expanded = false},
-              (struct PEFile){.name = "otherthing.h", .is_dir = false, .is_expanded = false},
-          },
-      },
-      (struct PEFile){ .is_dir = true, .is_expanded = false, .name = "Other Dir", .children_count = 2,  
-        .children = (struct PEFile[]){
-              (struct PEFile){.name = "turky.h", .is_dir = false, .is_expanded = false},
-              (struct PEFile){.name = "folder", .is_dir = true, .is_expanded = false, 
-              .children_count = 2,
-              .children = (struct PEFile[]){
-                (struct PEFile){.name = "i miss Trixy.h", .is_dir = false, .is_expanded = false},
-                (struct PEFile){.name = "and Willow.h", .is_dir = false, .is_expanded = false},
-              }},
-          },
-      },
-  };
+  // struct PEFile demo_files[] = {
+  //     (struct PEFile){.is_dir = false, .is_expanded = false, .name = "main.c"},
+  //     (struct PEFile){.is_dir = false, .is_expanded = false, .name = "lib.h"},
+  //     (struct PEFile){.is_dir = false, .is_expanded = false, .name = "lib2.h"},
+  //     (struct PEFile){ .is_dir = true, .is_expanded = false, .name = "Some Dir", .children_count = 2,  
+  //       .children = (struct PEFile[]){
+  //             (struct PEFile){.name = "thingindir.h", .is_dir = false, .is_expanded = false},
+  //             (struct PEFile){.name = "otherthing.h", .is_dir = false, .is_expanded = false},
+  //         },
+  //     },
+  //     (struct PEFile){ .is_dir = true, .is_expanded = false, .name = "Other Dir", .children_count = 2,  
+  //       .children = (struct PEFile[]){
+  //             (struct PEFile){.name = "turky.h", .is_dir = false, .is_expanded = false},
+  //             (struct PEFile){.name = "folder", .is_dir = true, .is_expanded = false, 
+  //             .children_count = 2,
+  //             .children = (struct PEFile[]){
+  //               (struct PEFile){.name = "i miss Trixy.h", .is_dir = false, .is_expanded = false},
+  //               (struct PEFile){.name = "and Willow.h", .is_dir = false, .is_expanded = false},
+  //             }},
+  //         },
+  //     },
+  // };
   // clang-format on
-  struct ProjectExplorer explorer = {.items = demo_files, .items_count = 5};
+
+  //= {.items = demo_files, .items_count = 5};
+
+  struct ProjectExplorer explorer = ProjectExplorerFromDir(".");
 
   SetExitKey(KEY_NULL);
 
