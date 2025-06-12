@@ -37,6 +37,11 @@
   if (!(COND))       \
   fprintf(stderr, "ASSERTION FAILED \'%s\' @ %s:%d", #COND, __FILE__, __LINE__), abort()
 
+#define IS_CONTROL_DOWN() (IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL))
+#define IS_ALT_DOWN() (IsKeyDown(KEY_LEFT_ALT) || IsKeyDown(KEY_RIGHT_ALT))
+#define IS_SHIFT_DOWN() (IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT))
+#define IS_KEY_PRESSED_OR_REPETING(KEY) (IsKeyPressed((KEY)) || IsKeyPressedRepeat((KEY)))
+
 Vector2 MeasureTextEx2(const char *text, size_t text_len);
 void PostCurrsorLineChanged();
 
@@ -72,14 +77,22 @@ size_t g_lines_count;
 int g_topline;
 int g_screen_line_count;
 
+Camera2D g_x_scroll_view = {.zoom = 1}; // used to scroll left and right
+
+
 int g_cursor_line, g_cursor_col;
 char g_open_file_path[1024] = {0};
+
+bool g_show_search_ui = false;
+
 
 bool g_file_changed = false;
 
 bool g_is_select = false;
 size_t g_select_start_ln, g_select_start_col, // start is like anchor
     g_select_end_ln, g_select_end_col;        // end is like where the user ended up
+
+
 
 void DelSelectedText(),
     BeginSelection(), // shift + arrow
@@ -100,7 +113,6 @@ enum Syntax
 
 bool HasUnsavedChanges() { return g_file_changed; }
 
-Camera2D g_x_scroll_view = {.zoom = 1}; // used to scroll left and right
 
 void GrowString(struct Line *l)
 {
@@ -612,6 +624,91 @@ void Paste()
   DoSyntaxHighlighting();
 }
 
+void SaveAs()
+{
+  const char *saveAsPath = SaveFileDialog(GetApplicationDirectory(), "*");
+  if (saveAsPath)
+  {
+    printf("save as: %s\n", saveAsPath);
+    memset(g_open_file_path, 0, sizeof(g_open_file_path));
+    memcpy(g_open_file_path, saveAsPath, strlen(saveAsPath));
+    SaveOpenFile();
+  }
+}
+
+void StartSearchUI() { g_show_search_ui = true; }
+
+void OpenFile()
+{
+  const char *newPath = OpenFileDialog(GetApplicationDirectory(), "*");
+  printf("opening : %s\n", newPath);
+  if (newPath)
+  {
+    OpenTextFile(newPath);
+  }
+}
+
+void ZoomIn()
+{
+  g_font_height += 1.0f;
+  OnResize();
+}
+
+void ZoomOut()
+{
+  g_font_height -= 1.0f;
+  OnResize();
+}
+
+void ZoomReset()
+{
+  g_font_height = DEFAULT_FONT_SIZE;
+  OnResize();
+}
+
+void PageUp()
+{
+
+  PreCurrsorLineChanged();
+  g_topline -= g_screen_line_count - 5;
+  g_cursor_line -= g_screen_line_count - 5;
+  PostCurrsorLineChanged();
+}
+
+void PageDown()
+{
+
+  PreCurrsorLineChanged();
+  g_topline += g_screen_line_count - 5;
+  g_cursor_line += g_screen_line_count - 5;
+
+  PostCurrsorLineChanged();
+}
+
+void CurrsorUp()
+{
+  PreCurrsorLineChanged();
+  g_cursor_line -= 1;
+  PostCurrsorLineChanged();
+}
+
+void CurrsorDown()
+{
+  PreCurrsorLineChanged();
+  g_cursor_line += 1;
+  PostCurrsorLineChanged();
+}
+void CurrsorLeft() { g_cursor_col -= 1; }
+void CurrsorRight() { g_cursor_col += 1; }
+void TabKeyPressed()
+{
+  g_file_changed = true;
+  for (size_t i = 0; i < TAB_SIZE; i++)
+  {
+    InsertCharAtCurrsor(' ');
+  }
+}
+
 int main(int argc, char *argv[])
 {
   SetConfigFlags(FLAG_WINDOW_RESIZABLE); //| FLAG_MSAA_4X_HINT | FLAG_VSYNC_HINT);
@@ -660,7 +757,6 @@ int main(int argc, char *argv[])
   OnResize();
 
   bool run = true;
-  bool show_search_ui = false;
 
   while (run)
   {
@@ -701,220 +797,66 @@ int main(int argc, char *argv[])
     float font_width_height_ratio = g_font.recs[0].height / g_font.recs[0].width;
     int effective_font_width = g_font_height / font_width_height_ratio;
 
-    if (!show_search_ui)
+
+    if (g_show_search_ui)
     {
+      /* todo search ui logic */
+    }
+    else /* Editor Logic */
+    {
+      // clang-format off
+      if (IS_SHIFT_DOWN() && IS_KEY_PRESSED_OR_REPETING(KEY_UP)) SelectUp();
+      else if (IS_SHIFT_DOWN() && IS_KEY_PRESSED_OR_REPETING(KEY_DOWN)) SelectDown();
+      else if (IS_SHIFT_DOWN() && IS_KEY_PRESSED_OR_REPETING(KEY_LEFT)) SelectLeft();
+      else if (IS_SHIFT_DOWN() && IS_KEY_PRESSED_OR_REPETING(KEY_RIGHT)) SelectRight();
+      else if (IS_KEY_PRESSED_OR_REPETING(KEY_UP)) CurrsorUp();
+      else if (IS_KEY_PRESSED_OR_REPETING(KEY_DOWN)) CurrsorDown();
+      else if (IS_KEY_PRESSED_OR_REPETING(KEY_LEFT)) CurrsorLeft();
+      else if (IS_KEY_PRESSED_OR_REPETING(KEY_RIGHT)) CurrsorRight();
+      else if (IS_CONTROL_DOWN() && IS_KEY_PRESSED_OR_REPETING(KEY_UP)) g_topline -= 1;
+      else if (IS_CONTROL_DOWN() && IS_KEY_PRESSED_OR_REPETING(KEY_DOWN)) g_topline += 1;
+      else if (IS_CONTROL_DOWN() && IS_KEY_PRESSED_OR_REPETING(KEY_LEFT)) JumpCursorToLeft();
+      else if (IS_CONTROL_DOWN() && IS_KEY_PRESSED_OR_REPETING(KEY_RIGHT)) JumpCursorToRight();
+      else if (IS_ALT_DOWN() && IS_KEY_PRESSED_OR_REPETING(KEY_UP)) MoveLineUp();
+      else if (IS_ALT_DOWN() && IS_KEY_PRESSED_OR_REPETING(KEY_DOWN)) MoveLineDown();
+      else if (IS_CONTROL_DOWN() && IS_SHIFT_DOWN() && IsKeyPressed(KEY_S)) SaveAs();
+      else if (IS_CONTROL_DOWN() && IsKeyPressed(KEY_F)) StartSearchUI();
+      else if (IS_CONTROL_DOWN() && IsKeyPressed(KEY_O)) OpenFile();
+      else if (IS_CONTROL_DOWN() && IsKeyPressed(KEY_S)) SaveOpenFile();
+      else if (IS_CONTROL_DOWN() && IS_KEY_PRESSED_OR_REPETING(KEY_EQUAL)) ZoomIn();
+      else if (IS_CONTROL_DOWN() && IS_KEY_PRESSED_OR_REPETING(KEY_MINUS)) ZoomOut();
+      else if (IS_CONTROL_DOWN() && IsKeyPressed(KEY_ZERO)) ZoomReset();
+      else if (IS_CONTROL_DOWN() && IS_KEY_PRESSED_OR_REPETING(KEY_V)) Paste();
+      else if (IS_CONTROL_DOWN() && IsKeyPressed(KEY_C)) CopySelection();
+      else if (IS_CONTROL_DOWN() && IsKeyPressed(KEY_X)) CutSelection();
+      else if (IS_KEY_PRESSED_OR_REPETING(KEY_PAGE_UP)) PageUp();
+      else if (IS_KEY_PRESSED_OR_REPETING(KEY_PAGE_DOWN)) PageDown();
+      else if (IsKeyPressed(KEY_HOME)) HomeCursor();
+      else if (IsKeyPressed(KEY_END)) EndCursor();
+      else if (IS_KEY_PRESSED_OR_REPETING(KEY_BACKSPACE)) BackspaceKeyPressed();
+      else if (IS_KEY_PRESSED_OR_REPETING(KEY_DELETE)) DeleteKeyPressed();
+      else if (IS_KEY_PRESSED_OR_REPETING(KEY_ENTER)) EnterKeyPressed();
+      else if (IS_KEY_PRESSED_OR_REPETING(KEY_TAB)) TabKeyPressed();
+      else if (IsKeyPressed(KEY_ESCAPE) && g_is_select) ClearSelection();
+      // clang-format on
 
-      if (IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL))
+      int c;
+      bool anything_entered = false;
+
+      do
       {
-        if (IsKeyPressed(KEY_S) && (IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT)))
-        {
+        c = GetCharPressed();
+        if (!c)
+          break;
 
-          const char *saveAsPath = SaveFileDialog(GetApplicationDirectory(), "*");
-          if (saveAsPath)
-          {
-            printf("save as: %s\n", saveAsPath);
-            memset(g_open_file_path, 0, sizeof(g_open_file_path));
-            memcpy(g_open_file_path, saveAsPath, strlen(saveAsPath));
-            SaveOpenFile();
-          }
-        }
-        else if (IsKeyPressed(KEY_F))
-        {
-          show_search_ui = true;
-        }
-        else if (IsKeyPressed(KEY_O))
-        {
+        InsertCharAtCurrsor(c);
+        anything_entered = true;
 
-          const char *newPath = OpenFileDialog(GetApplicationDirectory(), "*");
-          printf("opening : %s\n", newPath);
-          if (newPath)
-          {
-            OpenTextFile(newPath);
-          }
-        }
-        else if (IsKeyPressed(KEY_S))
-        {
-          SaveOpenFile();
-        }
-        else if (IsKeyPressed(KEY_EQUAL) || IsKeyPressedRepeat(KEY_EQUAL))
-        {
-          g_font_height += 1.0f;
-          OnResize();
-        }
-        else if (IsKeyPressed(KEY_MINUS) || IsKeyPressedRepeat(KEY_MINUS))
-        {
-          g_font_height -= 1.0f;
-          OnResize();
-        }
-        else if (IsKeyPressed(KEY_ZERO))
-        {
-          g_font_height = DEFAULT_FONT_SIZE;
-          OnResize();
-        }
-        else if (IsKeyPressed(KEY_UP) || IsKeyPressedRepeat(KEY_UP))
-        {
-          g_topline -= 1;
-        }
-        else if (IsKeyPressed(KEY_DOWN) || IsKeyPressedRepeat(KEY_DOWN))
-        {
-          g_topline += 1;
-        }
-        else if (IsKeyPressed(KEY_LEFT) || IsKeyPressedRepeat(KEY_LEFT))
-        {
-          JumpCursorToLeft();
-        }
-        else if (IsKeyPressed(KEY_RIGHT) || IsKeyPressedRepeat(KEY_RIGHT))
-        {
-          JumpCursorToRight();
-        }
-        else if (IsKeyPressed(KEY_V) || IsKeyPressedRepeat(KEY_V))
-        {
-          Paste();
-        }
-        else if (IsKeyPressed(KEY_C) || IsKeyPressedRepeat(KEY_C))
-        {
-          CopySelection();
-        }
-        else if (IsKeyPressed(KEY_X) || IsKeyPressedRepeat(KEY_X))
-        {
-          CutSelection();
-        }
+      } while (c);
 
-        // else if (IsKeyPressed(KEY_Z))
-        // {
-        //   Undo();
-        // }
-        // else if (IsKeyPressed(KEY_Z))
-        // {
-        //   Redo();
-        // }
-      }
-      if (IsKeyDown(KEY_LEFT_ALT) || IsKeyDown(KEY_RIGHT_ALT))
+      if (anything_entered)
       {
-        if (IsKeyPressed(KEY_UP) || IsKeyPressedRepeat(KEY_UP))
-        {
-          MoveLineUp();
-        }
-        else if (IsKeyPressed(KEY_DOWN) || IsKeyPressedRepeat(KEY_DOWN))
-        {
-          MoveLineDown();
-        }
-      }
-      else
-      {
-
-        if (IsKeyPressed(KEY_PAGE_UP) || IsKeyPressedRepeat(KEY_PAGE_UP))
-        {
-          PreCurrsorLineChanged();
-          g_topline -= g_screen_line_count - 5;
-          g_cursor_line -= g_screen_line_count - 5;
-          PostCurrsorLineChanged();
-        }
-        else if ((IsKeyPressed(KEY_UP) || IsKeyPressedRepeat(KEY_UP)) && (IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT)))
-        {
-          if (!g_is_select)
-            BeginSelection();
-          SelectUp();
-        }
-        else if ((IsKeyPressed(KEY_DOWN) || IsKeyPressedRepeat(KEY_DOWN)) && (IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT)))
-        {
-          if (!g_is_select)
-            BeginSelection();
-          SelectDown();
-        }
-        else if ((IsKeyPressed(KEY_LEFT) || IsKeyPressedRepeat(KEY_LEFT)) && (IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT)))
-        {
-          if (!g_is_select)
-            BeginSelection();
-          SelectLeft();
-        }
-        else if ((IsKeyPressed(KEY_RIGHT) || IsKeyPressedRepeat(KEY_RIGHT)) && (IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT)))
-        {
-          if (!g_is_select)
-            BeginSelection();
-          SelectRight();
-        }
-        else if (IsKeyPressed(KEY_HOME))
-        {
-          HomeCursor();
-        }
-        else if (IsKeyPressed(KEY_END))
-        {
-          EndCursor();
-        }
-        else if (IsKeyPressed(KEY_PAGE_DOWN) || IsKeyPressedRepeat(KEY_PAGE_DOWN))
-        {
-          PreCurrsorLineChanged();
-          g_topline += g_screen_line_count - 5;
-          g_cursor_line += g_screen_line_count - 5;
-
-          PostCurrsorLineChanged();
-        }
-        else if (IsKeyPressed(KEY_UP) || IsKeyPressedRepeat(KEY_UP))
-        {
-          PreCurrsorLineChanged();
-          g_cursor_line -= 1;
-          PostCurrsorLineChanged();
-        }
-        else if (IsKeyPressed(KEY_DOWN) || IsKeyPressedRepeat(KEY_DOWN))
-        {
-          PreCurrsorLineChanged();
-          g_cursor_line += 1;
-          PostCurrsorLineChanged();
-        }
-        else if (IsKeyPressed(KEY_LEFT) || IsKeyPressedRepeat(KEY_LEFT))
-        {
-          g_cursor_col -= 1;
-        }
-        else if (IsKeyPressed(KEY_RIGHT) || IsKeyPressedRepeat(KEY_RIGHT))
-        {
-          g_cursor_col += 1;
-        }
-        else if (IsKeyPressed(KEY_BACKSPACE) || IsKeyPressedRepeat(KEY_BACKSPACE))
-        {
-          BackspaceKeyPressed();
-        }
-        else if (IsKeyPressed(KEY_DELETE) || IsKeyPressedRepeat(KEY_DELETE))
-        {
-          DeleteKeyPressed();
-        }
-        else if (IsKeyPressed(KEY_ENTER) || IsKeyPressedRepeat(KEY_ENTER))
-        {
-          EnterKeyPressed();
-        }
-        else if (IsKeyPressed(KEY_TAB) || IsKeyPressedRepeat(KEY_TAB))
-        {
-          g_file_changed = true;
-          for (size_t i = 0; i < TAB_SIZE; i++)
-          {
-            InsertCharAtCurrsor(' ');
-          }
-        }
-        else if (IsKeyPressed(KEY_ESCAPE) && g_is_select)
-        {
-          ClearSelection();
-        }
-        else
-        {
-          int c;
-          bool anything_entered = false;
-
-          do
-          {
-            c = GetCharPressed();
-            if (!c)
-              break;
-
-            InsertCharAtCurrsor(c);
-            anything_entered = true;
-
-          } while (c);
-
-          if (anything_entered)
-          {
-            DoSyntaxHighlighting();
-          }
-        }
+        DoSyntaxHighlighting();
       }
 
       if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT))
@@ -1087,7 +1029,6 @@ int main(int argc, char *argv[])
 
     { // currsor rendering
       struct Line *l = &g_lines[g_cursor_line];
-      // Vector2 linelen = MeasureTextEx2(l->base, g_cursor_col);
       float llx = effective_font_width * (LINE_NUMBERS_SUPPORTED + 2 + g_cursor_col);
       float cy = (g_cursor_line - g_topline) * g_font_height;
       DrawLineEx((Vector2){llx, cy}, (Vector2){llx, cy + g_font_height}, 2, BLACK);
@@ -1095,14 +1036,14 @@ int main(int argc, char *argv[])
 
     EndMode2D();
 
-    if (show_search_ui)
+    if (g_show_search_ui)
     {
       static char serach_buffer[32] = {0};
       static char replace_buffer[32] = {0};
 
       if (IsKeyPressed(KEY_ESCAPE))
       {
-        show_search_ui = false;
+        g_show_search_ui = false;
       }
 
       Rectangle pos = {
@@ -1140,26 +1081,24 @@ int main(int argc, char *argv[])
     { // statusbar rendering
       int status_y = GetScreenHeight() - g_font_height;
       DrawRectangle(0, status_y, GetScreenWidth(), g_font_height, (Color){0xd8, 0xd4, 0xc4, 0xff});
-      // DrawTextCodepoint(g_font, '~' + 11, (Vector2){10, status_y}, g_font_size, BLACK);
-      const char *fontsz_msg = TextFormat("Font Size %.0f", g_font_height);
-      DrawTextEx(g_font, fontsz_msg, (Vector2){10, status_y}, g_font_height, g_font_spacing, BLACK);
+      // const char *fontsz_msg = TextFormat("Font Size %.0f", g_font_height);
+      // DrawTextEx(g_font, fontsz_msg, (Vector2){10, status_y}, g_font_height, g_font_spacing, BLACK);
 
-      // if (g_is_select)
-      {
-        Vector2 measure = MeasureTextEx2(fontsz_msg, strlen(fontsz_msg));
-        DrawTextEx(g_font,
-                   TextFormat("Select: start:%lu:%lu  end:%lu:%lu, cur %lu:%lu", g_select_start_ln, g_select_start_col, g_select_end_ln, g_select_end_col, g_cursor_line, g_cursor_col),
-                   (Vector2){20 + measure.x, status_y},
-                   g_font_height,
-                   g_font_spacing,
-                   BLACK);
-        //
-      }
+      // {
+      //   Vector2 measure = MeasureTextEx2(fontsz_msg, strlen(fontsz_msg));
+      //   DrawTextEx(g_font,
+      //              TextFormat("Select: start:%lu:%lu  end:%lu:%lu, cur %lu:%lu", g_select_start_ln, g_select_start_col, g_select_end_ln, g_select_end_col, g_cursor_line, g_cursor_col),
+      //              (Vector2){20 + measure.x, status_y},
+      //              g_font_height,
+      //              g_font_spacing,
+      //              BLACK);
+      // }
+      const char *currsor_pos_text = TextFormat("%lu:%lu", g_cursor_line + 1, g_cursor_col + 1);
+
+      DrawTextEx(g_font, currsor_pos_text,
+                 (Vector2){GetScreenWidth() - effective_font_width * (strlen(currsor_pos_text)+1), status_y},
+                 g_font_height, g_font_spacing, BLACK);
     }
-
-    // DrawText(TextFormat("TOP IDX: %d\n%u\n%f\n%f", g_topline, redraw_count, cy,
-    //                     linelen.x),
-    //          40, GetScreenHeight() - g_font_size * 4, g_font_size, PURPLE);
 
     EndDrawing();
   }
@@ -1197,8 +1136,9 @@ of the line.
 
 void SelectLeft()
 {
+
   if (!g_is_select)
-    return;
+    BeginSelection();
 
   if (g_cursor_col > 0)
   {
@@ -1216,8 +1156,9 @@ void SelectLeft()
 
 void SelectUp()
 {
+
   if (!g_is_select)
-    return;
+    BeginSelection();
 
   if (g_cursor_line > 0)
   {
@@ -1233,8 +1174,9 @@ void SelectUp()
 
 void SelectRight()
 {
+
   if (!g_is_select)
-    return;
+    BeginSelection();
 
   struct Line *line = &g_lines[g_cursor_line];
 
@@ -1254,8 +1196,9 @@ void SelectRight()
 
 void SelectDown()
 {
+
   if (!g_is_select)
-    return;
+    BeginSelection();
 
   if (g_cursor_line + 1 < g_lines_count)
   {
