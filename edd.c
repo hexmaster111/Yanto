@@ -79,12 +79,12 @@ int g_screen_line_count;
 
 Camera2D g_x_scroll_view = {.zoom = 1}; // used to scroll left and right
 
-
 int g_cursor_line, g_cursor_col;
 char g_open_file_path[1024] = {0};
 
 bool g_show_search_ui = false;
-
+char g_serach_buffer[32] = {0};
+char g_replace_buffer[32] = {0};
 
 bool g_file_changed = false;
 
@@ -92,8 +92,7 @@ bool g_is_select = false;
 size_t g_select_start_ln, g_select_start_col, // start is like anchor
     g_select_end_ln, g_select_end_col;        // end is like where the user ended up
 
-
-
+char *GetSelectedText();
 void DelSelectedText(),
     BeginSelection(), // shift + arrow
     ClearSelection(), // escape
@@ -112,7 +111,6 @@ enum Syntax
 } g_open_file_syntax;
 
 bool HasUnsavedChanges() { return g_file_changed; }
-
 
 void GrowString(struct Line *l)
 {
@@ -636,7 +634,17 @@ void SaveAs()
   }
 }
 
-void StartSearchUI() { g_show_search_ui = true; }
+void StartSearchUI()
+{
+  g_show_search_ui = true;
+  if (g_is_select)
+  {
+    const char *stext = GetSelectedText();
+    // we had some text selected, lets open the search ui with the text already being searched for
+    strncpy(g_serach_buffer, stext, sizeof(g_serach_buffer) - 1);
+    g_serach_buffer[sizeof(g_serach_buffer) - 1] = '\0';
+  }
+}
 
 void OpenFile()
 {
@@ -796,7 +804,6 @@ int main(int argc, char *argv[])
 
     float font_width_height_ratio = g_font.recs[0].height / g_font.recs[0].width;
     int effective_font_width = g_font_height / font_width_height_ratio;
-
 
     if (g_show_search_ui)
     {
@@ -1038,8 +1045,6 @@ int main(int argc, char *argv[])
 
     if (g_show_search_ui)
     {
-      static char serach_buffer[32] = {0};
-      static char replace_buffer[32] = {0};
 
       if (IsKeyPressed(KEY_ESCAPE))
       {
@@ -1055,14 +1060,14 @@ int main(int argc, char *argv[])
       DrawRectangleRec(pos, rgb(244, 255, 184));
 
       // search box
-      osfd_TextBox(serach_buffer, sizeof(serach_buffer),
+      osfd_TextBox(g_serach_buffer, sizeof(g_serach_buffer),
                    pos.x + 1,
                    pos.y + 1,
                    pos.width - 1,
                    true);
 
       // replace box
-      osfd_TextBox(replace_buffer, sizeof(replace_buffer),
+      osfd_TextBox(g_replace_buffer, sizeof(g_replace_buffer),
                    pos.x + 1,
                    pos.y + 1 + g_font_height,
                    pos.width - 1,
@@ -1096,7 +1101,7 @@ int main(int argc, char *argv[])
       const char *currsor_pos_text = TextFormat("%lu:%lu", g_cursor_line + 1, g_cursor_col + 1);
 
       DrawTextEx(g_font, currsor_pos_text,
-                 (Vector2){GetScreenWidth() - effective_font_width * (strlen(currsor_pos_text)+1), status_y},
+                 (Vector2){GetScreenWidth() - effective_font_width * (strlen(currsor_pos_text) + 1), status_y},
                  g_font_height, g_font_spacing, BLACK);
     }
 
