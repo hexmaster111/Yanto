@@ -717,11 +717,323 @@ void TabKeyPressed()
   }
 }
 
+float g_font_width_height_ratio;
+int g_effective_font_width;
+
+void UpdateEditor(float x, float y)
+{
+
+  // clang-format off
+      if (IS_SHIFT_DOWN() && IS_KEY_PRESSED_OR_REPETING(KEY_UP)) SelectUp();
+      else if (IS_SHIFT_DOWN() && IS_KEY_PRESSED_OR_REPETING(KEY_DOWN)) SelectDown();
+      else if (IS_SHIFT_DOWN() && IS_KEY_PRESSED_OR_REPETING(KEY_LEFT)) SelectLeft();
+      else if (IS_SHIFT_DOWN() && IS_KEY_PRESSED_OR_REPETING(KEY_RIGHT)) SelectRight();
+      else if (IS_CONTROL_DOWN() && IS_KEY_PRESSED_OR_REPETING(KEY_UP)) g_topline -= 1;
+      else if (IS_CONTROL_DOWN() && IS_KEY_PRESSED_OR_REPETING(KEY_DOWN)) g_topline += 1;
+      else if (IS_CONTROL_DOWN() && IS_KEY_PRESSED_OR_REPETING(KEY_LEFT)) JumpCursorToLeft();
+      else if (IS_CONTROL_DOWN() && IS_KEY_PRESSED_OR_REPETING(KEY_RIGHT)) JumpCursorToRight();
+      else if (IS_KEY_PRESSED_OR_REPETING(KEY_UP)) CurrsorUp();
+      else if (IS_KEY_PRESSED_OR_REPETING(KEY_DOWN)) CurrsorDown();
+      else if (IS_KEY_PRESSED_OR_REPETING(KEY_LEFT)) CurrsorLeft();
+      else if (IS_KEY_PRESSED_OR_REPETING(KEY_RIGHT)) CurrsorRight();
+      else if (IS_ALT_DOWN() && IS_KEY_PRESSED_OR_REPETING(KEY_UP)) MoveLineUp();
+      else if (IS_ALT_DOWN() && IS_KEY_PRESSED_OR_REPETING(KEY_DOWN)) MoveLineDown();
+      else if (IS_CONTROL_DOWN() && IS_SHIFT_DOWN() && IsKeyPressed(KEY_S)) SaveAs();
+      else if (IS_CONTROL_DOWN() && IsKeyPressed(KEY_F)) StartSearchUI();
+      else if (IS_CONTROL_DOWN() && IsKeyPressed(KEY_O)) OpenFile();
+      else if (IS_CONTROL_DOWN() && IsKeyPressed(KEY_S)) SaveOpenFile();
+      else if (IS_CONTROL_DOWN() && IS_KEY_PRESSED_OR_REPETING(KEY_EQUAL)) ZoomIn();
+      else if (IS_CONTROL_DOWN() && IS_KEY_PRESSED_OR_REPETING(KEY_MINUS)) ZoomOut();
+      else if (IS_CONTROL_DOWN() && IsKeyPressed(KEY_ZERO)) ZoomReset();
+      else if (IS_CONTROL_DOWN() && IS_KEY_PRESSED_OR_REPETING(KEY_V)) Paste();
+      else if (IS_CONTROL_DOWN() && IsKeyPressed(KEY_C)) CopySelection();
+      else if (IS_CONTROL_DOWN() && IsKeyPressed(KEY_X)) CutSelection();
+      else if (IS_KEY_PRESSED_OR_REPETING(KEY_PAGE_UP)) PageUp();
+      else if (IS_KEY_PRESSED_OR_REPETING(KEY_PAGE_DOWN)) PageDown();
+      else if (IsKeyPressed(KEY_HOME)) HomeCursor();
+      else if (IsKeyPressed(KEY_END)) EndCursor();
+      else if (IS_KEY_PRESSED_OR_REPETING(KEY_BACKSPACE)) BackspaceKeyPressed();
+      else if (IS_KEY_PRESSED_OR_REPETING(KEY_DELETE)) DeleteKeyPressed();
+      else if (IS_KEY_PRESSED_OR_REPETING(KEY_ENTER)) EnterKeyPressed();
+      else if (IS_KEY_PRESSED_OR_REPETING(KEY_TAB)) TabKeyPressed();
+      else if (IsKeyPressed(KEY_ESCAPE) && g_is_select) ClearSelection();
+  // clang-format on
+
+  int c;
+  bool anything_entered = false;
+
+  do
+  {
+    c = GetCharPressed();
+    if (!c)
+      break;
+
+    InsertCharAtCurrsor(c);
+    anything_entered = true;
+
+  } while (c);
+
+  if (anything_entered)
+  {
+    DoSyntaxHighlighting();
+  }
+
+  if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT))
+  {
+    Vector2 mousePos = GetMousePosition();
+    int line = g_topline + (mousePos.y - y) / g_font_height;
+    int col = (mousePos.x - x) / g_effective_font_width - (LINE_NUMBERS_SUPPORTED + 2);
+    if (col > 0)
+    {
+      if (line < 0)
+        line = 0;
+      if (line >= g_lines_count)
+        line = g_lines_count - 1;
+      g_cursor_line = line;
+
+      if (col > g_lines[g_cursor_line].len)
+        col = g_lines[g_cursor_line].len;
+      g_cursor_col = col;
+
+      ClearSelection();
+    }
+  }
+
+  Vector2 scroll = GetMouseWheelMoveV();
+  g_topline -= scroll.y * 2;
+
+  if (g_topline + g_screen_line_count > g_lines_count)
+  {
+    g_topline = g_lines_count - g_screen_line_count;
+  }
+
+  if (0 > g_topline)
+    g_topline = 0;
+
+  g_x_scroll_view.offset.x += scroll.x * 30;
+  if (g_x_scroll_view.offset.x > 0)
+    g_x_scroll_view.offset.x = 0;
+
+  if (0 > g_topline)
+    g_topline = 0;
+
+  if (0 > g_cursor_line)
+    g_cursor_line = 0;
+
+  if (0 > g_cursor_col)
+    g_cursor_col = 0;
+
+  if (g_cursor_line >= g_lines_count - 1)
+    g_cursor_line = g_lines_count - 1;
+
+  if (g_cursor_col > g_lines[g_cursor_line].len)
+    g_cursor_col = g_lines[g_cursor_line].len;
+}
+
+void DrawEditor(float x, float y)
+{
+  for (size_t i = g_topline; i < (g_screen_line_count + g_topline); i++)
+  {
+
+    if (i == g_cursor_line)
+    {
+      DrawRectangle(0 + x,
+                    ((i - g_topline) * g_font_height) + y,
+                    GetScreenWidth() * 2,
+                    g_font_height,
+                    rgb(238, 232, 213));
+    }
+
+    FDrawText(TextFormat("%*d", LINE_NUMBERS_SUPPORTED, i + 1), (3) + x, ((i - g_topline) * g_font_height) + y, BLACK);
+
+    if (i >= g_lines_count)
+      break;
+
+    struct Line l = g_lines[i];
+
+    for (size_t c = 0; c < l.len; c++)
+    {
+      Color color = BLACK;
+
+      switch (l.style[c])
+      {
+        // clang-format off
+              case C_Black  : color = rgb(0, 0, 0);       break;
+              case C_Blue   : color = rgb(0, 121, 241);   break;
+              case C_Brick  : color = rgb(203, 75, 22);   break;
+              case C_Green  : color = rgb(133, 153, 0);   break;
+              case C_Purple : color = rgb(148, 6, 184);   break;
+              case C_Gray   : color = rgb(156, 156, 156); break;
+              case C_Teal   : color = rgb(42, 161, 152);  break;
+              case C_Red    : color = rgb(221, 15, 15);   break;
+        // clang-format on
+      }
+
+      if (g_is_select)
+      {
+        bool do_hl = false;
+
+        if (g_select_start_ln != g_select_end_ln || g_select_start_col != g_select_end_col)
+        {
+          // Normalize selection order
+          size_t sel_start_ln = g_select_start_ln;
+          size_t sel_start_col = g_select_start_col;
+          size_t sel_end_ln = g_select_end_ln;
+          size_t sel_end_col = g_select_end_col;
+          if (sel_start_ln > sel_end_ln || (sel_start_ln == sel_end_ln && sel_start_col > sel_end_col))
+          {
+            size_t tmp;
+            tmp = sel_start_ln;
+            sel_start_ln = sel_end_ln;
+            sel_end_ln = tmp;
+            tmp = sel_start_col;
+            sel_start_col = sel_end_col;
+            sel_end_col = tmp;
+          }
+          if (i > sel_start_ln && i < sel_end_ln)
+          {
+            do_hl = true;
+          }
+          else if (i == sel_start_ln && i == sel_end_ln)
+          {
+            if (c >= sel_start_col && c < sel_end_col)
+              do_hl = true;
+          }
+          else if (i == sel_start_ln)
+          {
+            if (c >= sel_start_col)
+              do_hl = true;
+          }
+          else if (i == sel_end_ln)
+          {
+            if (c < sel_end_col)
+              do_hl = true;
+          }
+        }
+
+        if (do_hl)
+          DrawRectangle((g_effective_font_width * (LINE_NUMBERS_SUPPORTED + 2 + c)) + x,
+                        ((i - g_topline) * g_font_height) + y,
+                        g_effective_font_width, g_font_height, rgb(150, 229, 248));
+      }
+
+      FDrawText(TextFormat("%c", l.base[c]),
+                (g_effective_font_width * (LINE_NUMBERS_SUPPORTED + 2 + c)) + x,
+                ((i - g_topline) * g_font_height) + y, color);
+    }
+  }
+
+  { // currsor rendering
+    struct Line *l = &g_lines[g_cursor_line];
+    float llx = (g_effective_font_width * (LINE_NUMBERS_SUPPORTED + 2 + g_cursor_col)) + x;
+    float cy = ((g_cursor_line - g_topline) * g_font_height) + y;
+    DrawLineEx((Vector2){llx, cy}, (Vector2){llx, cy + g_font_height}, 2, BLACK);
+  }
+}
+
+struct PEFile
+{
+  bool is_expanded, is_dir;
+  const char *name;
+
+  struct PEFile *children;
+  int children_count;
+};
+
+struct ProjectExplorer
+{
+  struct PEFile *items;
+  int items_count;
+};
+
+/** TODO: Use this to build a projectExploer based on current dir files */
+// struct ProjectExplorer FromDir(const char *dir);
+// FilePathList files = LoadDirectoryFiles(".");
+// for (size_t i = 0; i < files.count; i++)
+// {
+//   printf("%s\n", files.paths[i]);
+// }
+// UnloadDirectoryFiles(files);
+
+
+
+void _DrawProjectItem(float *x, float *y, float *width, struct PEFile *f)
+{
+  bool clicked = false;
+  const char *lbl = f->name;
+
+  if (f->is_dir)
+  {
+    lbl = TextFormat("%c %s", f->is_expanded ? 'V' : '>', f->name);
+  }
+
+  clicked = osfd_TextButton(lbl, *x, *y, *width);
+
+  *y += g_font_height;
+
+  if (f->is_dir && f->is_expanded)
+  {
+    *width -= g_effective_font_width;
+    *x += g_effective_font_width;
+
+    for (size_t i = 0; i < f->children_count; i++)
+    {
+      _DrawProjectItem(x, y, width, &f->children[i]);
+    }
+
+    *width += g_effective_font_width;
+    *x -= g_effective_font_width;
+  }
+
+  if (clicked && f->is_dir)
+  {
+    f->is_expanded = !f->is_expanded;
+  }
+}
+
+void DrawProjectExplorer(float x, float y, float width, struct ProjectExplorer *ex)
+{
+  DrawRectangle(x, y, width, GetScreenHeight(), rgb(238, 232, 213));
+
+  float cx = x, cy = y;
+
+  for (size_t i = 0; i < ex->items_count; i++)
+  {
+    _DrawProjectItem(&cx, &cy, &width, &ex->items[i]);
+  }
+}
+
 int main(int argc, char *argv[])
 {
   SetConfigFlags(FLAG_WINDOW_RESIZABLE); //| FLAG_MSAA_4X_HINT | FLAG_VSYNC_HINT);
   InitWindow(800, 600, "FCON");
   SetTargetFPS(60);
+
+  // clang-format off
+  struct PEFile demo_files[] = {
+      (struct PEFile){.is_dir = false, .is_expanded = false, .name = "main.c"},
+      (struct PEFile){.is_dir = false, .is_expanded = false, .name = "lib.h"},
+      (struct PEFile){.is_dir = false, .is_expanded = false, .name = "lib2.h"},
+      (struct PEFile){ .is_dir = true, .is_expanded = false, .name = "Some Dir", .children_count = 2,  
+        .children = (struct PEFile[]){
+              (struct PEFile){.name = "thingindir.h", .is_dir = false, .is_expanded = false},
+              (struct PEFile){.name = "otherthing.h", .is_dir = false, .is_expanded = false},
+          },
+      },
+      (struct PEFile){ .is_dir = true, .is_expanded = false, .name = "Other Dir", .children_count = 2,  
+        .children = (struct PEFile[]){
+              (struct PEFile){.name = "turky.h", .is_dir = false, .is_expanded = false},
+              (struct PEFile){.name = "folder", .is_dir = true, .is_expanded = false, 
+              .children_count = 2,
+              .children = (struct PEFile[]){
+                (struct PEFile){.name = "i miss Trixy.h", .is_dir = false, .is_expanded = false},
+                (struct PEFile){.name = "and Willow.h", .is_dir = false, .is_expanded = false},
+              }},
+          },
+      },
+  };
+  // clang-format on
+  struct ProjectExplorer explorer = {.items = demo_files, .items_count = 5};
 
   SetExitKey(KEY_NULL);
 
@@ -802,8 +1114,8 @@ int main(int argc, char *argv[])
       OnResize();
     }
 
-    float font_width_height_ratio = g_font.recs[0].height / g_font.recs[0].width;
-    int effective_font_width = g_font_height / font_width_height_ratio;
+    g_font_width_height_ratio = g_font.recs[0].height / g_font.recs[0].width;
+    g_effective_font_width = g_font_height / g_font_width_height_ratio;
 
     if (g_show_search_ui)
     {
@@ -811,237 +1123,16 @@ int main(int argc, char *argv[])
     }
     else /* Editor Logic */
     {
-      // clang-format off
-      if (IS_SHIFT_DOWN() && IS_KEY_PRESSED_OR_REPETING(KEY_UP)) SelectUp();
-      else if (IS_SHIFT_DOWN() && IS_KEY_PRESSED_OR_REPETING(KEY_DOWN)) SelectDown();
-      else if (IS_SHIFT_DOWN() && IS_KEY_PRESSED_OR_REPETING(KEY_LEFT)) SelectLeft();
-      else if (IS_SHIFT_DOWN() && IS_KEY_PRESSED_OR_REPETING(KEY_RIGHT)) SelectRight();
-      else if (IS_KEY_PRESSED_OR_REPETING(KEY_UP)) CurrsorUp();
-      else if (IS_KEY_PRESSED_OR_REPETING(KEY_DOWN)) CurrsorDown();
-      else if (IS_KEY_PRESSED_OR_REPETING(KEY_LEFT)) CurrsorLeft();
-      else if (IS_KEY_PRESSED_OR_REPETING(KEY_RIGHT)) CurrsorRight();
-      else if (IS_CONTROL_DOWN() && IS_KEY_PRESSED_OR_REPETING(KEY_UP)) g_topline -= 1;
-      else if (IS_CONTROL_DOWN() && IS_KEY_PRESSED_OR_REPETING(KEY_DOWN)) g_topline += 1;
-      else if (IS_CONTROL_DOWN() && IS_KEY_PRESSED_OR_REPETING(KEY_LEFT)) JumpCursorToLeft();
-      else if (IS_CONTROL_DOWN() && IS_KEY_PRESSED_OR_REPETING(KEY_RIGHT)) JumpCursorToRight();
-      else if (IS_ALT_DOWN() && IS_KEY_PRESSED_OR_REPETING(KEY_UP)) MoveLineUp();
-      else if (IS_ALT_DOWN() && IS_KEY_PRESSED_OR_REPETING(KEY_DOWN)) MoveLineDown();
-      else if (IS_CONTROL_DOWN() && IS_SHIFT_DOWN() && IsKeyPressed(KEY_S)) SaveAs();
-      else if (IS_CONTROL_DOWN() && IsKeyPressed(KEY_F)) StartSearchUI();
-      else if (IS_CONTROL_DOWN() && IsKeyPressed(KEY_O)) OpenFile();
-      else if (IS_CONTROL_DOWN() && IsKeyPressed(KEY_S)) SaveOpenFile();
-      else if (IS_CONTROL_DOWN() && IS_KEY_PRESSED_OR_REPETING(KEY_EQUAL)) ZoomIn();
-      else if (IS_CONTROL_DOWN() && IS_KEY_PRESSED_OR_REPETING(KEY_MINUS)) ZoomOut();
-      else if (IS_CONTROL_DOWN() && IsKeyPressed(KEY_ZERO)) ZoomReset();
-      else if (IS_CONTROL_DOWN() && IS_KEY_PRESSED_OR_REPETING(KEY_V)) Paste();
-      else if (IS_CONTROL_DOWN() && IsKeyPressed(KEY_C)) CopySelection();
-      else if (IS_CONTROL_DOWN() && IsKeyPressed(KEY_X)) CutSelection();
-      else if (IS_KEY_PRESSED_OR_REPETING(KEY_PAGE_UP)) PageUp();
-      else if (IS_KEY_PRESSED_OR_REPETING(KEY_PAGE_DOWN)) PageDown();
-      else if (IsKeyPressed(KEY_HOME)) HomeCursor();
-      else if (IsKeyPressed(KEY_END)) EndCursor();
-      else if (IS_KEY_PRESSED_OR_REPETING(KEY_BACKSPACE)) BackspaceKeyPressed();
-      else if (IS_KEY_PRESSED_OR_REPETING(KEY_DELETE)) DeleteKeyPressed();
-      else if (IS_KEY_PRESSED_OR_REPETING(KEY_ENTER)) EnterKeyPressed();
-      else if (IS_KEY_PRESSED_OR_REPETING(KEY_TAB)) TabKeyPressed();
-      else if (IsKeyPressed(KEY_ESCAPE) && g_is_select) ClearSelection();
-      // clang-format on
-
-      int c;
-      bool anything_entered = false;
-
-      do
-      {
-        c = GetCharPressed();
-        if (!c)
-          break;
-
-        InsertCharAtCurrsor(c);
-        anything_entered = true;
-
-      } while (c);
-
-      if (anything_entered)
-      {
-        DoSyntaxHighlighting();
-      }
-
-      if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT))
-      {
-        Vector2 pt = GetMousePosition();
-
-        for (size_t i = g_topline; i < (g_screen_line_count + g_topline); i++)
-        {
-          Rectangle r = {effective_font_width * LINE_NUMBERS_SUPPORTED - 1,
-                         (i - g_topline) * g_font_height,
-                         GetScreenWidth(),
-                         g_font_height};
-
-          if (CheckCollisionPointRec(pt, r))
-          {
-            g_cursor_line = i;
-
-            // now that we found the line, lets find the col that we are on
-            struct Line *line = &g_lines[i];
-
-            if (g_cursor_line >= g_lines_count || line->len == 0)
-            {
-              g_cursor_col = 0;
-            }
-            else
-            {
-              for (size_t col = 0; col <= line->len; col++)
-              {
-                Vector2 textSize = MeasureTextEx2(line->base, col);
-                if (pt.x < textSize.x + (LINE_NUMBERS_SUPPORTED * effective_font_width))
-                {
-                  g_cursor_col = col;
-                  break;
-                }
-              }
-            }
-
-            break;
-          }
-        }
-      }
+      UpdateEditor(150, 0);
     }
-
-    Vector2 scroll = GetMouseWheelMoveV();
-    g_topline -= scroll.y * 2;
-
-    if (g_topline + g_screen_line_count > g_lines_count)
-    {
-      g_topline = g_lines_count - g_screen_line_count;
-    }
-
-    if (0 > g_topline)
-      g_topline = 0;
-
-    g_x_scroll_view.offset.x += scroll.x * 30;
-    if (g_x_scroll_view.offset.x > 0)
-      g_x_scroll_view.offset.x = 0;
-
-    if (0 > g_topline)
-      g_topline = 0;
-
-    if (0 > g_cursor_line)
-      g_cursor_line = 0;
-
-    if (0 > g_cursor_col)
-      g_cursor_col = 0;
-
-    if (g_cursor_line >= g_lines_count - 1)
-      g_cursor_line = g_lines_count - 1;
-
-    if (g_cursor_col > g_lines[g_cursor_line].len)
-      g_cursor_col = g_lines[g_cursor_line].len;
 
     BeginDrawing();
     ClearBackground(BACKGROUND_COLOR);
     BeginMode2D(g_x_scroll_view);
-
-    { // Text Rendering
-      for (size_t i = g_topline; i < (g_screen_line_count + g_topline); i++)
-      {
-
-        if (i == g_cursor_line)
-        {
-          DrawRectangle(0,
-                        (i - g_topline) * g_font_height,
-                        GetScreenWidth() * 2,
-                        g_font_height,
-                        rgb(238, 232, 213));
-        }
-
-        FDrawText(TextFormat("%*d", LINE_NUMBERS_SUPPORTED, i + 1), 3, (i - g_topline) * g_font_height, BLACK);
-
-        if (i >= g_lines_count)
-          break;
-
-        struct Line l = g_lines[i];
-
-        for (size_t c = 0; c < l.len; c++)
-        {
-          Color color = BLACK;
-
-          switch (l.style[c])
-          {
-            // clang-format off
-              case C_Black  : color = rgb(0, 0, 0);       break;
-              case C_Blue   : color = rgb(0, 121, 241);   break;
-              case C_Brick  : color = rgb(203, 75, 22);   break;
-              case C_Green  : color = rgb(133, 153, 0);   break;
-              case C_Purple : color = rgb(148, 6, 184);   break;
-              case C_Gray   : color = rgb(156, 156, 156); break;
-              case C_Teal   : color = rgb(42, 161, 152);  break;
-              case C_Red    : color = rgb(221, 15, 15);   break;
-            // clang-format on
-          }
-
-          if (g_is_select)
-          {
-            bool do_hl = false;
-
-            if (g_select_start_ln != g_select_end_ln || g_select_start_col != g_select_end_col)
-            {
-              // Normalize selection order
-              size_t sel_start_ln = g_select_start_ln;
-              size_t sel_start_col = g_select_start_col;
-              size_t sel_end_ln = g_select_end_ln;
-              size_t sel_end_col = g_select_end_col;
-              if (sel_start_ln > sel_end_ln || (sel_start_ln == sel_end_ln && sel_start_col > sel_end_col))
-              {
-                size_t tmp;
-                tmp = sel_start_ln;
-                sel_start_ln = sel_end_ln;
-                sel_end_ln = tmp;
-                tmp = sel_start_col;
-                sel_start_col = sel_end_col;
-                sel_end_col = tmp;
-              }
-              if (i > sel_start_ln && i < sel_end_ln)
-              {
-                do_hl = true;
-              }
-              else if (i == sel_start_ln && i == sel_end_ln)
-              {
-                if (c >= sel_start_col && c < sel_end_col)
-                  do_hl = true;
-              }
-              else if (i == sel_start_ln)
-              {
-                if (c >= sel_start_col)
-                  do_hl = true;
-              }
-              else if (i == sel_end_ln)
-              {
-                if (c < sel_end_col)
-                  do_hl = true;
-              }
-            }
-
-            if (do_hl)
-              DrawRectangle(effective_font_width * (LINE_NUMBERS_SUPPORTED + 2 + c),
-                            (i - g_topline) * g_font_height,
-                            effective_font_width, g_font_height, rgb(150, 229, 248));
-          }
-
-          FDrawText(TextFormat("%c", l.base[c]),
-                    effective_font_width * (LINE_NUMBERS_SUPPORTED + 2 + c),
-                    (i - g_topline) * g_font_height, color);
-        }
-      }
-    }
-
-    { // currsor rendering
-      struct Line *l = &g_lines[g_cursor_line];
-      float llx = effective_font_width * (LINE_NUMBERS_SUPPORTED + 2 + g_cursor_col);
-      float cy = (g_cursor_line - g_topline) * g_font_height;
-      DrawLineEx((Vector2){llx, cy}, (Vector2){llx, cy + g_font_height}, 2, BLACK);
-    }
-
+    DrawEditor(150, 0);
     EndMode2D();
+
+    DrawProjectExplorer(0, 0, 150, &explorer);
 
     if (g_show_search_ui)
     {
@@ -1101,7 +1192,7 @@ int main(int argc, char *argv[])
       const char *currsor_pos_text = TextFormat("%lu:%lu", g_cursor_line + 1, g_cursor_col + 1);
 
       DrawTextEx(g_font, currsor_pos_text,
-                 (Vector2){GetScreenWidth() - effective_font_width * (strlen(currsor_pos_text) + 1), status_y},
+                 (Vector2){GetScreenWidth() - g_effective_font_width * (strlen(currsor_pos_text) + 1), status_y},
                  g_font_height, g_font_spacing, BLACK);
     }
 
