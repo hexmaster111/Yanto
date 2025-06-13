@@ -934,7 +934,7 @@ void DrawEditor(float x, float y)
 struct PEFile
 {
   bool is_expanded, is_dir;
-  char *name; // i must be free'd
+  char *name, *path; // i must be free'd
 
   struct PEFile *children;
   int children_count;
@@ -944,12 +944,53 @@ struct ProjectExplorer
 {
   struct PEFile *items;
   int items_count;
+  Camera2D scroll;
 };
+
+void _ProjectExplorerFromDir(const char *dir, struct PEFile **dst, int *count_out)
+{
+  printf("_ProjectExplorerFromDir(const char *dir:%s, struct PEFile **dst:%p, int *count_out:%p*(%d))\n",
+         dir, dst, count_out, count_out == NULL ? 0 : *count_out);
+  FilePathList files = LoadDirectoryFiles(dir);
+  size_t len;
+
+  (*dst) = malloc(len = sizeof(struct PEFile) * files.count);
+  memset(*dst, 0, len);
+
+  *count_out = files.count;
+
+  for (size_t i = 0; i < files.count; i++)
+  {
+    const char *fname = GetFileName(files.paths[i]);
+    (*dst)[i].name = malloc(len = strlen(fname) + 1);
+    memcpy((*dst)[i].name, fname, len);
+
+
+    (*dst)[i].path = malloc(len = strlen(files.paths[i]) + 1);
+    memcpy((*dst)[i].path, files.paths[i], len);
+
+
+    (*dst)[i].is_dir = DirectoryExists(files.paths[i]);
+
+    if ((*dst)[i].is_dir)
+    {
+      _ProjectExplorerFromDir(
+          files.paths[i],
+          &(*dst)[i].children,
+          &(*dst)[i].children_count);
+    }
+  }
+
+  UnloadDirectoryFiles(files);
+}
 
 struct ProjectExplorer ProjectExplorerFromDir(const char *dir)
 {
   size_t len;
   struct ProjectExplorer ret = {0};
+
+  ret.scroll.zoom = 1;
+
   FilePathList files = LoadDirectoryFiles(dir);
 
   ret.items_count = files.count;
@@ -958,12 +999,21 @@ struct ProjectExplorer ProjectExplorerFromDir(const char *dir)
 
   for (size_t i = 0; i < ret.items_count; i++)
   {
-    ret.items[i].name = malloc(len = strlen(files.paths[i]) + 1 );
-    memcpy(ret.items[i].name, files.paths[i], len);
-    ret.items[i].is_dir = DirectoryExists(ret.items[i].name);
-  }
+    const char *fname = GetFileName(files.paths[i]);
 
-  /** TODO: I should be recurssive or something to load up things that is_dir  */
+    ret.items[i].name = malloc(len = strlen(fname) + 1);
+    memcpy(ret.items[i].name, fname, len);
+
+    ret.items[i].path = malloc(len = strlen(files.paths[i]) + 1);
+    memcpy(ret.items[i].path, files.paths[i], len);
+
+    ret.items[i].is_dir = DirectoryExists(files.paths[i]);
+
+    if (ret.items[i].is_dir)
+    {
+      _ProjectExplorerFromDir(files.paths[i], &ret.items[i].children, &ret.items[i].children_count);
+    }
+  }
 
   UnloadDirectoryFiles(files);
 
@@ -1002,18 +1052,23 @@ void _DrawProjectItem(float *x, float *y, float *width, struct PEFile *f)
   {
     f->is_expanded = !f->is_expanded;
   }
+  else if (clicked)
+  {
+    OpenTextFile(f->path);
+  }
 }
 
 void DrawProjectExplorer(float x, float y, float width, struct ProjectExplorer *ex)
 {
   DrawRectangle(x, y, width, GetScreenHeight(), rgb(238, 232, 213));
 
-  float cx = x, cy = y;
-
+  BeginScissorMode(x, y, width, GetScreenHeight());
+  float cx = 0, cy = 0;
   for (size_t i = 0; i < ex->items_count; i++)
   {
     _DrawProjectItem(&cx, &cy, &width, &ex->items[i]);
   }
+  EndScissorMode();
 }
 
 int main(int argc, char *argv[])
@@ -1021,33 +1076,6 @@ int main(int argc, char *argv[])
   SetConfigFlags(FLAG_WINDOW_RESIZABLE); //| FLAG_MSAA_4X_HINT | FLAG_VSYNC_HINT);
   InitWindow(800, 600, "FCON");
   SetTargetFPS(60);
-
-  // clang-format off
-  // struct PEFile demo_files[] = {
-  //     (struct PEFile){.is_dir = false, .is_expanded = false, .name = "main.c"},
-  //     (struct PEFile){.is_dir = false, .is_expanded = false, .name = "lib.h"},
-  //     (struct PEFile){.is_dir = false, .is_expanded = false, .name = "lib2.h"},
-  //     (struct PEFile){ .is_dir = true, .is_expanded = false, .name = "Some Dir", .children_count = 2,  
-  //       .children = (struct PEFile[]){
-  //             (struct PEFile){.name = "thingindir.h", .is_dir = false, .is_expanded = false},
-  //             (struct PEFile){.name = "otherthing.h", .is_dir = false, .is_expanded = false},
-  //         },
-  //     },
-  //     (struct PEFile){ .is_dir = true, .is_expanded = false, .name = "Other Dir", .children_count = 2,  
-  //       .children = (struct PEFile[]){
-  //             (struct PEFile){.name = "turky.h", .is_dir = false, .is_expanded = false},
-  //             (struct PEFile){.name = "folder", .is_dir = true, .is_expanded = false, 
-  //             .children_count = 2,
-  //             .children = (struct PEFile[]){
-  //               (struct PEFile){.name = "i miss Trixy.h", .is_dir = false, .is_expanded = false},
-  //               (struct PEFile){.name = "and Willow.h", .is_dir = false, .is_expanded = false},
-  //             }},
-  //         },
-  //     },
-  // };
-  // clang-format on
-
-  //= {.items = demo_files, .items_count = 5};
 
   struct ProjectExplorer explorer = ProjectExplorerFromDir(".");
 
