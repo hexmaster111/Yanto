@@ -20,3 +20,14 @@
 
 ## What my TODO stuff is
 - CTRL_F : Find and Replace, got some ui, not any logic
+
+
+## bugs
+``` c
+enum
+{
+    Somehting  = 0,
+    Somehting1 = 1,
+};
+```
+the keyword `enum` dose not highlight correctly

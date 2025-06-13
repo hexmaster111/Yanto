@@ -12,12 +12,17 @@
 #include "osfd.c"
 #include "interactivity.c"
 
+#include "fonts/font_builtin.h"
+
+// #define DARKMODE
+#include "colors.h"
+
+
 #define TAB_SIZE 4
 #define LINE_NUMBERS_SUPPORTED 3
 #define DEFAULT_FONT_SIZE 16
 #define INIT_LINE_COUNT 5
-#define BACKGROUND_COLOR ((Color){0xfd, 0xf6, 0xe3, 0xff})
-#define rgb(COLORR, COLORG, COLORB) ((Color){COLORR, COLORG, COLORB, 0xff})
+
 
 #define COLOR_COMMENT (C_Gray)
 #define COLOR_TYPE (C_Brick)
@@ -103,11 +108,20 @@ void DelSelectedText(),
     CopySelection(),  // ctrl+c while g_is_select
     CutSelection();   // ctrl+x while g_is_select
 
+enum DUCP
+{
+  DUCP_CancelClose, // User said never mind to closing the current doc
+  DUCP_Continue     // user said that its ok to close what they have open
+};
+
+enum DUCP DoUnsavedChangesPopup();
+
 enum Syntax
 {
   S_PlainText,
   S_C,
-  S_Verilog
+  S_Verilog,
+  S_Json
 } g_open_file_syntax;
 
 bool HasUnsavedChanges() { return g_file_changed; }
@@ -154,8 +168,9 @@ void DoSyntaxHighlighting()
   {
     // clang-format off
       case S_C: DoCSyntaxHighlighing(); break;
-      case S_Verilog: break;
       case S_PlainText: DoTxtSyntaxHighlighting(); break;
+      case S_Verilog: break;
+      case S_Json: break;
     // clang-format on
   }
 }
@@ -397,7 +412,18 @@ void OpenTextFile(const char *filepath)
   char **lines = ReadAllLines(filepath, &linecount);
 
   if (!linecount || !lines)
+  { /* Nothing to load, so lets treat it like a new file */
+    g_lines = malloc(sizeof(struct Line) * INIT_LINE_COUNT);
+    g_lines_count = INIT_LINE_COUNT;
+
+    for (size_t i = 0; i < INIT_LINE_COUNT; i++)
+    {
+      g_lines[i].base = NULL;
+      g_lines[i].style = NULL;
+      g_lines[i].cap = g_lines[i].len = 0;
+    }
     return;
+  }
 
   g_lines = malloc(sizeof(struct Line) * linecount);
   if (!g_lines)
@@ -421,28 +447,27 @@ void OpenTextFile(const char *filepath)
   g_open_file_syntax = S_PlainText;
 
   // clang-format off
-  if (strcmp(ext, ".c") == 0)      g_open_file_syntax = S_C;
+  if(ext == NULL) /* for .files */ g_open_file_syntax = S_PlainText;
+  else if (strcmp(ext, ".c") == 0) g_open_file_syntax = S_C;
   else if (strcmp(ext, ".C") == 0) g_open_file_syntax = S_C;
   else if (strcmp(ext, ".h") == 0) g_open_file_syntax = S_C;
   else if (strcmp(ext, ".H") == 0) g_open_file_syntax = S_C;
   else if (strcmp(ext, ".v") == 0) g_open_file_syntax = S_Verilog;
   else if (strcmp(ext, ".V") == 0) g_open_file_syntax = S_Verilog;
+  else if (strcmp(ext, ".json") == 0) g_open_file_syntax = S_Json;
+  else if (strcmp(ext, ".JSON") == 0) g_open_file_syntax = S_Json;
   // clang-format on
+
+  g_file_changed = false;
 
   DoSyntaxHighlighting();
 }
 
 void OnResize() { g_screen_line_count = (GetScreenHeight() / g_font_height) - 1; /*for status*/ }
-
-void PreCurrsorLineChanged()
-{
-  g_lines[g_cursor_line].last_cursor_pos = g_cursor_col;
-}
+void PreCurrsorLineChanged() { g_lines[g_cursor_line].last_cursor_pos = g_cursor_col; }
 
 void PostCurrsorLineChanged()
-{
-
-  // Range check for g_cursor_line
+{ // Range check for g_cursor_line
   if (g_cursor_line < 0)
     g_cursor_line = 0;
   if (g_cursor_line >= g_lines_count)
@@ -799,8 +824,15 @@ void UpdateEditor(float x, float y)
     }
   }
 
-  Vector2 scroll = GetMouseWheelMoveV();
-  g_topline -= scroll.y * 2;
+  if (CheckCollisionPointRec(GetMousePosition(), (Rectangle){x, y, GetScreenWidth(), GetScreenHeight()}))
+  {
+    Vector2 scroll = GetMouseWheelMoveV();
+    g_topline -= scroll.y * 2;
+
+    g_x_scroll_view.offset.x += scroll.x * 30;
+    if (g_x_scroll_view.offset.x > 0)
+      g_x_scroll_view.offset.x = 0;
+  }
 
   if (g_topline + g_screen_line_count > g_lines_count)
   {
@@ -809,10 +841,6 @@ void UpdateEditor(float x, float y)
 
   if (0 > g_topline)
     g_topline = 0;
-
-  g_x_scroll_view.offset.x += scroll.x * 30;
-  if (g_x_scroll_view.offset.x > 0)
-    g_x_scroll_view.offset.x = 0;
 
   if (0 > g_topline)
     g_topline = 0;
@@ -841,10 +869,10 @@ void DrawEditor(float x, float y)
                     ((i - g_topline) * g_font_height) + y,
                     GetScreenWidth() * 2,
                     g_font_height,
-                    rgb(238, 232, 213));
+                    EDITOR_BACKGROUND_COLOR);
     }
 
-    FDrawText(TextFormat("%*d", LINE_NUMBERS_SUPPORTED, i + 1), (3) + x, ((i - g_topline) * g_font_height) + y, BLACK);
+    FDrawText(TextFormat("%*d", LINE_NUMBERS_SUPPORTED, i + 1), (3) + x, ((i - g_topline) * g_font_height) + y, TEXT_NORMAL_COLOR);
 
     if (i >= g_lines_count)
       break;
@@ -858,14 +886,14 @@ void DrawEditor(float x, float y)
       switch (l.style[c])
       {
         // clang-format off
-              case C_Black  : color = rgb(0, 0, 0);       break;
-              case C_Blue   : color = rgb(0, 121, 241);   break;
-              case C_Brick  : color = rgb(203, 75, 22);   break;
-              case C_Green  : color = rgb(133, 153, 0);   break;
-              case C_Purple : color = rgb(148, 6, 184);   break;
-              case C_Gray   : color = rgb(156, 156, 156); break;
-              case C_Teal   : color = rgb(42, 161, 152);  break;
-              case C_Red    : color = rgb(221, 15, 15);   break;
+      case C_Black  : color = TEXT_NORMAL_COLOR; break;
+      case C_Blue   : color = TEXT_BLUE_COLOR;   break;
+      case C_Brick  : color = TEXT_BRICK_COLOR;  break;
+      case C_Green  : color = TEXT_GREEN_COLOR;  break;
+      case C_Purple : color = TEXT_PURPLE_COLOR; break;
+      case C_Gray   : color = TEXT_GRAY_COLOR;   break;
+      case C_Teal   : color = TEXT_TEAL_COLOR;   break;
+      case C_Red    : color = TEXT_RED_COLOR;    break;
         // clang-format on
       }
 
@@ -914,7 +942,7 @@ void DrawEditor(float x, float y)
         if (do_hl)
           DrawRectangle((g_effective_font_width * (LINE_NUMBERS_SUPPORTED + 2 + c)) + x,
                         ((i - g_topline) * g_font_height) + y,
-                        g_effective_font_width, g_font_height, rgb(150, 229, 248));
+                        g_effective_font_width, g_font_height, SELECTED_TEXT_COLOR);
       }
 
       FDrawText(TextFormat("%c", l.base[c]),
@@ -947,12 +975,35 @@ struct ProjectExplorer
   Camera2D scroll;
 };
 
+int _SortCompareFilePath(const void *_a, const void *_b)
+{
+  // _a and _b are pointers to pointers to char (char **)
+  const char *a = *(const char **)_a;
+  const char *b = *(const char **)_b;
+
+  bool a_is_dir = DirectoryExists(a);
+  bool b_is_dir = DirectoryExists(b);
+
+  if (a_is_dir && !b_is_dir)
+    return -1;
+  if (!a_is_dir && b_is_dir)
+    return 1;
+
+  return strcasecmp(a, b);
+}
+
+void SortFilePathListByName(FilePathList files)
+{
+  qsort(files.paths, files.count, sizeof(files.paths[0]), _SortCompareFilePath);
+}
+
 void _ProjectExplorerFromDir(const char *dir, struct PEFile **dst, int *count_out)
 {
-  printf("_ProjectExplorerFromDir(const char *dir:%s, struct PEFile **dst:%p, int *count_out:%p*(%d))\n",
-         dir, dst, count_out, count_out == NULL ? 0 : *count_out);
+
   FilePathList files = LoadDirectoryFiles(dir);
   size_t len;
+
+  SortFilePathListByName(files);
 
   (*dst) = malloc(len = sizeof(struct PEFile) * files.count);
   memset(*dst, 0, len);
@@ -962,13 +1013,12 @@ void _ProjectExplorerFromDir(const char *dir, struct PEFile **dst, int *count_ou
   for (size_t i = 0; i < files.count; i++)
   {
     const char *fname = GetFileName(files.paths[i]);
+
     (*dst)[i].name = malloc(len = strlen(fname) + 1);
     memcpy((*dst)[i].name, fname, len);
 
-
     (*dst)[i].path = malloc(len = strlen(files.paths[i]) + 1);
     memcpy((*dst)[i].path, files.paths[i], len);
-
 
     (*dst)[i].is_dir = DirectoryExists(files.paths[i]);
 
@@ -984,6 +1034,8 @@ void _ProjectExplorerFromDir(const char *dir, struct PEFile **dst, int *count_ou
   UnloadDirectoryFiles(files);
 }
 
+void FreeProjectExplorer(struct ProjectExplorer exp) { TODO("Free exp"); }
+
 struct ProjectExplorer ProjectExplorerFromDir(const char *dir)
 {
   size_t len;
@@ -992,6 +1044,8 @@ struct ProjectExplorer ProjectExplorerFromDir(const char *dir)
   ret.scroll.zoom = 1;
 
   FilePathList files = LoadDirectoryFiles(dir);
+
+  SortFilePathListByName(files);
 
   ret.items_count = files.count;
   ret.items = malloc(len = (sizeof(struct PEFile) * files.count));
@@ -1054,26 +1108,78 @@ void _DrawProjectItem(float *x, float *y, float *width, struct PEFile *f)
   }
   else if (clicked)
   {
-    OpenTextFile(f->path);
+    SetMouseOffset(0, 0);
+    if (DoUnsavedChangesPopup() == DUCP_Continue)
+    {
+      OpenTextFile(f->path);
+    }
   }
 }
 
 void DrawProjectExplorer(float x, float y, float width, struct ProjectExplorer *ex)
 {
-  DrawRectangle(x, y, width, GetScreenHeight(), rgb(238, 232, 213));
+  DrawRectangle(x, y, width, GetScreenHeight(), EXPLOERER_BACKGROUND_COLOR);
+
+  if (CheckCollisionPointRec(GetMousePosition(), (Rectangle){x, y, width, GetScreenHeight()}))
+  {
+    Vector2 scroll = GetMouseWheelMoveV();
+    ex->scroll.target.y -= (scroll.y * 2) * g_font_height;
+    if (0 > ex->scroll.target.y)
+    {
+      ex->scroll.target.y = 0;
+    }
+  }
 
   BeginScissorMode(x, y, width, GetScreenHeight());
+  BeginMode2D(ex->scroll);
+  SetMouseOffset(0, ex->scroll.target.y);
   float cx = 0, cy = 0;
   for (size_t i = 0; i < ex->items_count; i++)
   {
     _DrawProjectItem(&cx, &cy, &width, &ex->items[i]);
   }
+  SetMouseOffset(0, 0);
+  EndMode2D();
   EndScissorMode();
+}
+
+enum DUCP DoUnsavedChangesPopup()
+{
+  BeginScissorMode(0, 0, GetScreenWidth(), GetScreenHeight());
+
+  enum DUCP res = DUCP_CancelClose;
+
+  if (HasUnsavedChanges())
+  {
+    int resp = PopUp("You have unsaved changes", "",
+                     "Save and exit|Cancel|Discard Changes");
+
+    if (resp == 1) // save and exit
+    {
+      SaveOpenFile();
+      res = DUCP_Continue;
+    }
+    else if (resp == 3) // throw it away
+    {
+      res = DUCP_Continue;
+    }
+    else
+    { // excape or 2 (cancel)
+      res = DUCP_CancelClose;
+    }
+  }
+  else
+  {
+    res = DUCP_Continue;
+  }
+
+  EndScissorMode();
+  return res;
 }
 
 int main(int argc, char *argv[])
 {
-  SetConfigFlags(FLAG_WINDOW_RESIZABLE); //| FLAG_MSAA_4X_HINT | FLAG_VSYNC_HINT);
+  SetConfigFlags(FLAG_WINDOW_RESIZABLE | FLAG_MSAA_4X_HINT | FLAG_VSYNC_HINT);
   InitWindow(800, 600, "FCON");
   SetTargetFPS(60);
 
@@ -1081,9 +1187,15 @@ int main(int argc, char *argv[])
 
   SetExitKey(KEY_NULL);
 
-  Image img = LoadImage("fonts/font_8_16.png");
+  // Image img = LoadImage("fonts/font_8_16.png");
+  Image img = (Image){
+      .data = FONT_BUILTIN_DATA,
+      .width = FONT_BUILTIN_WIDTH,
+      .height = FONT_BUILTIN_HEIGHT,
+      .format = FONT_BUILTIN_FORMAT,
+      .mipmaps = 1};
   g_font = LoadFontFromImage(img, MAGENTA, '!');
-  UnloadImage(img);
+  // UnloadImage(img);
 
   TraceLog(LOG_INFO, "Loaded font with %d Glyphs", g_font.glyphCount);
 
@@ -1114,6 +1226,7 @@ int main(int argc, char *argv[])
     for (size_t i = 0; i < INIT_LINE_COUNT; i++)
     {
       g_lines[i].base = NULL;
+      g_lines[i].style = NULL;
       g_lines[i].cap = g_lines[i].len = 0;
     }
   }
@@ -1127,30 +1240,12 @@ int main(int argc, char *argv[])
 
     if (WindowShouldClose())
     {
-      if (HasUnsavedChanges())
-      {
-
-        int resp = PopUp("You have unsaved changes", "",
-                         "Save and exit|I dont wanna exit|Throw it away and exit");
-
-        if (resp == 1)
-        {
-          SaveOpenFile();
-
-          if (HasUnsavedChanges())
-          {
-            continue;
-          }
-        }
-        else if (resp == 3)
-        {
-          goto EXIT;
-        }
-      }
-      else
+      if (DoUnsavedChangesPopup() == DUCP_Continue)
       {
         goto EXIT;
       }
+      else
+        continue;
     }
 
     if (IsWindowResized())
@@ -1192,7 +1287,7 @@ int main(int argc, char *argv[])
           GetScreenWidth() - (GetScreenWidth() * 0.75f),
           g_font_height * 3 + 3};
 
-      DrawRectangleRec(pos, rgb(244, 255, 184));
+      DrawRectangleRec(pos, EDITOR_CURRENT_LINE_COLOR);
 
       // search box
       osfd_TextBox(g_serach_buffer, sizeof(g_serach_buffer),
@@ -1583,82 +1678,161 @@ void FreeAllLines(char **lines, int count)
 
   free(lines);
 }
-
 char **ReadAllLines(const char *fname, int *out_linecount)
 {
   FILE *f = fopen(fname, "r");
-
   if (f == NULL)
+  {
+    *out_linecount = 0;
     return NULL;
+  }
 
   int arraylen = 1024;
   int strlen = 1024;
-
   int lines_used = 0;
   int chars_read = 0;
 
   char **ret = malloc(sizeof(char *) * arraylen);
+  if (!ret)
+  {
+    fclose(f);
+    *out_linecount = 0;
+    return NULL;
+  }
   ret[lines_used] = malloc(strlen);
+  if (!ret[lines_used])
+  {
+    free(ret);
+    fclose(f);
+    *out_linecount = 0;
+    return NULL;
+  }
 
   while (1)
   {
-    if (feof(f))
-    {
-      // we are all done reading, finlise the last line
-      ret[lines_used] =
-          realloc(ret[lines_used], chars_read); // shrink string to be size read
-      ret[lines_used][chars_read - 1] = 0;      // terminate the string
-      lines_used++;
-      break;
-    }
-
-    char c = fgetc(f);
+    int c = fgetc(f);
 
     if (ferror(f))
     {
       perror("fgetc");
+      // Free all allocated memory
+      for (int i = 0; i <= lines_used; i++)
+      {
+        free(ret[i]);
+      }
+      free(ret);
+      fclose(f);
+      *out_linecount = 0;
       return NULL;
     }
 
-    if (chars_read > strlen)
+    if (feof(f))
+    {
+      if (chars_read > 0)
+      {
+        char *tmp = realloc(ret[lines_used], chars_read + 1);
+        if (!tmp)
+        {
+          // Free all allocated memory
+          for (int i = 0; i <= lines_used; i++)
+            free(ret[i]);
+          free(ret);
+          fclose(f);
+          *out_linecount = 0;
+          return NULL;
+        }
+        ret[lines_used] = tmp;
+        ret[lines_used][chars_read] = '\0';
+        lines_used++;
+      }
+      break;
+    }
+
+    if (chars_read + 1 >= strlen)
     {
       strlen *= 2;
-      ret[lines_used] = realloc(ret[lines_used], strlen);
+      char *tmp = realloc(ret[lines_used], strlen);
+      if (!tmp)
+      {
+        // Free all allocated memory
+        for (int i = 0; i <= lines_used; i++)
+          free(ret[i]);
+        free(ret);
+        fclose(f);
+        *out_linecount = 0;
+        return NULL;
+      }
+      ret[lines_used] = tmp;
     }
 
     if (c == '\n')
     {
-      // store this line
+      char *tmp = realloc(ret[lines_used], chars_read + 1);
+      if (!tmp)
+      {
+        // Free all allocated memory
+        for (int i = 0; i <= lines_used; i++)
+          free(ret[i]);
+        free(ret);
+        fclose(f);
+        *out_linecount = 0;
+        return NULL;
+      }
+      ret[lines_used] = tmp;
+      ret[lines_used][chars_read] = '\0';
 
-      ret[lines_used] = realloc(
-          ret[lines_used], chars_read + 1); // shrink string to be size read
-      ret[lines_used][chars_read] = 0;      // terminate the string
-
-      strlen = 1024; // reset var
-      chars_read = 0;
-
-      lines_used += 1;
-
-      if (lines_used >= arraylen) // grow the continaing array
+      lines_used++;
+      if (lines_used >= arraylen)
       {
         arraylen *= 2;
-        ret = realloc(ret, arraylen * sizeof(char *));
+        char **tmp_arr = realloc(ret, arraylen * sizeof(char *));
+        if (!tmp_arr)
+        {
+          for (int i = 0; i < lines_used; i++)
+            free(ret[i]);
+          free(ret);
+          fclose(f);
+          *out_linecount = 0;
+          return NULL;
+        }
+        ret = tmp_arr;
       }
-      ret[lines_used] = malloc(strlen); // alloc the next string
+      strlen = 1024;
+      chars_read = 0;
+      ret[lines_used] = malloc(strlen);
+      if (!ret[lines_used])
+      {
+        for (int i = 0; i < lines_used; i++)
+          free(ret[i]);
+        free(ret);
+        fclose(f);
+        *out_linecount = 0;
+        return NULL;
+      }
       continue;
     }
-    else if (c == '\r' || c == '\n' && 0 >= chars_read)
+    else if ((c == '\r' || c == '\n') && chars_read <= 0)
     {
-      // we just got a stray \r or \n
       continue;
     }
 
-    ret[lines_used][chars_read] = c;
-    chars_read += 1;
+    ret[lines_used][chars_read++] = (char)c;
   }
 
-  // resize the return array to fit used
-  ret = realloc(ret, lines_used * sizeof(char *));
+  fclose(f);
+
+  // If no lines were read, free and return NULL
+  if (lines_used == 0)
+  {
+    free(ret[0]);
+    free(ret);
+    *out_linecount = 0;
+    return NULL;
+  }
+
+  char **tmp_arr = realloc(ret, lines_used * sizeof(char *));
+  if (tmp_arr)
+    ret = tmp_arr;
 
   *out_linecount = lines_used;
   return ret;

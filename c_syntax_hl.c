@@ -8,8 +8,8 @@ const char *c_types[] = {
 
 const char *c_keywords[] = {
     "static", "const", "NULL", "sizeof", "malloc", "free", "typedef", "register", "struct", "union",
-    "enum", "extern",
-    NULL};
+    "enum", "extern", 
+  NULL};
 
 const char *c_flowcontrol[] = {
     "while", "switch", "case", "continue", "do", "break", "return", "if", "else", "for", "goto",
@@ -43,10 +43,14 @@ bool CReadWordFromLine(
   if (*pos >= linelen || line[*pos] == '\0')
     return false;
 
-  while (isspace(line[*pos]) && line[*pos] != '\0')
+  while (*pos < linelen && isspace(line[*pos]) && line[*pos] != '\0')
     *pos += 1; // skips whitespace
 
   if (*pos >= linelen || line[*pos] == '\0')
+    return false;
+
+  // Range check: ensure *pos is within bounds before accessing line[*pos]
+  if (*pos >= linelen)
     return false;
 
   size_t start = *pos;

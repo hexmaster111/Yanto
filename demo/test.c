@@ -16,6 +16,11 @@ int i = 0;   /*turkies are known for there int and size_t usage */
 #include <SomethingSpicy.h>
 #include "test header with space.h"
 
+enum
+{
+    SOME_CRAZY_CONST = 1,
+    SOME_OTHER_CONST = 2,
+};
 
 extern double 
 const char 

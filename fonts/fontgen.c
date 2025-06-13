@@ -23,9 +23,7 @@ int main(int argc, char *argv[])
     int char_rows = FNT_COUNT / char_cols;
     int widthPx = (char_cols * FNT_WIDTH) + char_cols + 1;
     int heightPx = (char_rows * FNT_HEIGHT) + char_rows + 1;
-
     Image target = GenImageColor(widthPx, heightPx, KY_COLOR);
-
     int ch = 0;
 
     for (size_t r = 0; r < char_rows; r++)
@@ -49,11 +47,13 @@ int main(int argc, char *argv[])
 
             ch += 1;
 
-            if(ch == 255) goto DONE; // by default, raylib can only handle about this many
+            if (ch == 255)
+                goto DONE; // by default, raylib can only handle about this many
         }
     }
 
 DONE:
-
-    return ExportImage(target, "font.png") == 1 ? 0 : 1;
+    ExportImage(target, "font.png");
+    ExportImageAsCode(target, "font_builtin.h");
+    return 0;
 }
