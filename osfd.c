@@ -35,6 +35,8 @@ extern Font g_font;
 extern float g_font_height;
 extern float g_font_spacing;
 
+void SortFilePathList(FilePathList);
+
 int osfd_MeasureText(const char *text)
 {
     return MeasureTextEx(g_font, text, g_font_height, g_font_spacing).x;
