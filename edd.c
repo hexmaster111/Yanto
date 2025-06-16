@@ -992,7 +992,7 @@ int _SortCompareFilePath(const void *_a, const void *_b)
   return strcasecmp(a, b);
 }
 
-void SortFilePathListByName(FilePathList files)
+void SortFilePathList(FilePathList files)
 {
   qsort(files.paths, files.count, sizeof(files.paths[0]), _SortCompareFilePath);
 }
@@ -1003,7 +1003,7 @@ void _ProjectExplorerFromDir(const char *dir, struct PEFile **dst, int *count_ou
   FilePathList files = LoadDirectoryFiles(dir);
   size_t len;
 
-  SortFilePathListByName(files);
+  SortFilePathList(files);
 
   (*dst) = malloc(len = sizeof(struct PEFile) * files.count);
   memset(*dst, 0, len);
@@ -1045,7 +1045,7 @@ struct ProjectExplorer ProjectExplorerFromDir(const char *dir)
 
   FilePathList files = LoadDirectoryFiles(dir);
 
-  SortFilePathListByName(files);
+  SortFilePathList(files);
 
   ret.items_count = files.count;
   ret.items = malloc(len = (sizeof(struct PEFile) * files.count));

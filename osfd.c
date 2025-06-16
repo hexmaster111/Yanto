@@ -313,6 +313,8 @@ const char *osfd_DialogCore(
     // FilePathList filesindir = LoadDirectoryFilesEx(cwd, extention, false);
     FilePathList filesindir = LoadDirectoryFiles(cwd);
 
+    SortFilePathList(filesindir);
+
     while (run && !WindowShouldClose())
     {
 
