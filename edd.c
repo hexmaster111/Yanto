@@ -17,12 +17,10 @@
 // #define DARKMODE
 #include "colors.h"
 
-
 #define TAB_SIZE 4
 #define LINE_NUMBERS_SUPPORTED 3
 #define DEFAULT_FONT_SIZE 16
 #define INIT_LINE_COUNT 5
-
 
 #define COLOR_COMMENT (C_Gray)
 #define COLOR_TYPE (C_Brick)
@@ -52,6 +50,8 @@ void PostCurrsorLineChanged();
 
 void FreeAllLines(char **lines, int count);
 char **ReadAllLines(const char *fname, int *out_linecount);
+
+void SortFilePathList(FilePathList files);
 
 Font g_font;
 float g_font_height, g_font_spacing;
@@ -1034,7 +1034,23 @@ void _ProjectExplorerFromDir(const char *dir, struct PEFile **dst, int *count_ou
   UnloadDirectoryFiles(files);
 }
 
-void FreeProjectExplorer(struct ProjectExplorer exp) { TODO("Free exp"); }
+void FreeProjectExplorer(struct ProjectExplorer exp)
+{
+  for (int i = 0; i < exp.items_count; i++)
+  {
+    struct PEFile *item = &exp.items[i];
+    free(item->name);
+    free(item->path);
+    if (item->is_dir && item->children)
+    {
+      struct ProjectExplorer child_exp = {
+          .items = item->children,
+          .items_count = item->children_count};
+      FreeProjectExplorer(child_exp);
+    }
+  }
+  free(exp.items);
+}
 
 struct ProjectExplorer ProjectExplorerFromDir(const char *dir)
 {
@@ -1183,7 +1199,7 @@ int main(int argc, char *argv[])
   InitWindow(800, 600, "FCON");
   SetTargetFPS(60);
 
-  struct ProjectExplorer explorer = ProjectExplorerFromDir(".");
+  struct ProjectExplorer explorer = ProjectExplorerFromDir(GetDirectoryPath(argv[1]));
 
   SetExitKey(KEY_NULL);
 
@@ -1340,6 +1356,7 @@ int main(int argc, char *argv[])
 
 EXIT:
 
+  FreeProjectExplorer(explorer);
   CloseWindow();
 
   return 0;
