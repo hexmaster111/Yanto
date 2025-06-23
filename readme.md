@@ -21,6 +21,8 @@
 ## What my TODO stuff is
 - CTRL_F : Find and Replace, got some ui, not any logic
 - js, verilog, json, html  highlight
+- CTRL + T to open file selector UI
+- grid splitter between project explorer and text editor
 
 
 ## bugs

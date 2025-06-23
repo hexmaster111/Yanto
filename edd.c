@@ -108,9 +108,10 @@ void DelSelectedText(),
     CopySelection(),  // ctrl+c while g_is_select
     CutSelection();   // ctrl+x while g_is_select
 
-
-void CloseFile(); // closes the current file without asking the user to save
+void CloseFile();  // closes the current file without asking the user to save
 bool IsFileOpen(); // returns true if the g_open_filepath is a string longer then 1
+
+void NextSearchResault(), PrevSearchResault(), StartSearchUI();
 
 enum DUCP
 {
@@ -678,18 +679,6 @@ void SaveAs()
     memset(g_open_file_path, 0, sizeof(g_open_file_path));
     memcpy(g_open_file_path, saveAsPath, strlen(saveAsPath));
     SaveOpenFile();
-  }
-}
-
-void StartSearchUI()
-{
-  g_show_search_ui = true;
-  if (g_is_select)
-  {
-    const char *stext = GetSelectedText();
-    // we had some text selected, lets open the search ui with the text already being searched for
-    strncpy(g_serach_buffer, stext, sizeof(g_serach_buffer) - 1);
-    g_serach_buffer[sizeof(g_serach_buffer) - 1] = '\0';
   }
 }
 
@@ -1303,22 +1292,26 @@ int main(int argc, char *argv[])
     g_font_width_height_ratio = g_font.recs[0].height / g_font.recs[0].width;
     g_effective_font_width = g_font_height / g_font_width_height_ratio;
 
+    const float editor_x = 150, editor_y = 0;
+
+    // todo: gridsplitter, updown, split.x = editor_x
+
     if (g_show_search_ui)
     {
       /* todo search ui logic */
     }
     else /* Editor Logic */
     {
-      UpdateEditor(150, 0);
+      UpdateEditor(editor_x, editor_y);
     }
 
     BeginDrawing();
     ClearBackground(BACKGROUND_COLOR);
     BeginMode2D(g_x_scroll_view);
-    DrawEditor(150, 0);
+    DrawEditor(editor_x, editor_y);
     EndMode2D();
 
-    DrawProjectExplorer(0, 0, 150, &explorer);
+    DrawProjectExplorer(0, 0, editor_x, &explorer);
 
     if (g_show_search_ui)
     {
@@ -1336,28 +1329,37 @@ int main(int argc, char *argv[])
 
       DrawRectangleRec(pos, EDITOR_CURRENT_LINE_COLOR);
 
-      // search box
-      osfd_TextBox(g_serach_buffer, sizeof(g_serach_buffer),
-                   pos.x + 1,
-                   pos.y + 1,
-                   pos.width - 1,
-                   true);
+      TBAction search_box_act = osfd_TextBox(g_serach_buffer, sizeof(g_serach_buffer),
+                                             pos.x + 1,
+                                             pos.y + 1,
+                                             pos.width - 1,
+                                             true);
 
       // replace box
-      osfd_TextBox(g_replace_buffer, sizeof(g_replace_buffer),
-                   pos.x + 1,
-                   pos.y + 1 + g_font_height,
-                   pos.width - 1,
-                   false);
+      TBAction replace_box_act = osfd_TextBox(g_replace_buffer, sizeof(g_replace_buffer),
+                                              pos.x + 1,
+                                              pos.y + 1 + g_font_height,
+                                              pos.width - 1,
+                                              false);
 
       int fn_measure = osfd_MeasureText("Next");
       int fp_measure = osfd_MeasureText("Prev");
 
-      osfd_TextButton("Next", pos.x, pos.y + g_font_height + g_font_height + 1, fn_measure);
-      osfd_TextButton("Prev",
-                      (pos.x + pos.width) - fp_measure,
-                      pos.y + g_font_height + g_font_height + 2,
-                      fp_measure);
+      bool next_btn_pressed = osfd_TextButton("Next", pos.x, pos.y + g_font_height + g_font_height + 1, fn_measure);
+      bool prev_btn_pressed = osfd_TextButton("Prev",
+                                              (pos.x + pos.width) - fp_measure,
+                                              pos.y + g_font_height + g_font_height + 2,
+                                              fp_measure);
+
+      if (search_box_act == TBAccept || next_btn_pressed)
+      {
+        NextSearchResault();
+      }
+
+      if (prev_btn_pressed)
+      {
+        PrevSearchResault();
+      }
     }
 
     { // statusbar rendering
@@ -1393,6 +1395,74 @@ EXIT:
 
   return 0;
 }
+
+size_t g_search_line, g_search_col;
+
+void StartSearchUI()
+{
+  g_search_line = g_search_col = 0;
+  g_show_search_ui = true;
+
+  if (g_is_select)
+  {
+    const char *stext = GetSelectedText();
+    // we had some text selected, lets open the search ui with the text already being searched for
+    strncpy(g_serach_buffer, stext, sizeof(g_serach_buffer) - 1);
+    g_serach_buffer[sizeof(g_serach_buffer) - 1] = '\0';
+  }
+}
+
+void HighlightSearchFound(size_t line, size_t col_start, size_t len)
+{
+  memset(g_lines[line].style + col_start, C_Green, len);
+}
+
+void SearchResaultFind(int direction)
+{
+  puts("SearchResaultFind");
+
+  size_t search_len = strlen(g_serach_buffer);
+
+  while (true)
+  {
+    struct Line l = g_lines[g_search_line];
+
+    for (size_t c = g_search_col; c < l.len; c++)
+    {
+      char ch = l.base[c];
+      size_t remain = l.len - c;
+
+      if (search_len > remain)
+        goto LINE_TOO_SHORT;
+
+        // todo: perhaps a MEMCMP that matches case insensitively
+      if (memcmp(l.base + c, g_serach_buffer, search_len) == 0)
+      {
+        HighlightSearchFound(g_search_line, c, search_len);
+      }
+    }
+
+  LINE_TOO_SHORT:;
+    g_search_line += direction;
+
+    if (0 > g_search_line)
+    {
+      goto NOT_FOUND;
+    }
+
+    if (g_search_line >= g_lines_count)
+    {
+      goto NOT_FOUND;
+    }
+  }
+
+NOT_FOUND:;
+  g_search_line = g_search_col = 0;
+}
+
+void NextSearchResault() { SearchResaultFind(1); }
+
+void PrevSearchResault() { SearchResaultFind(-1); }
 
 void BeginSelection()
 {
