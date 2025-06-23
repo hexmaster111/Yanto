@@ -22,15 +22,28 @@
 #define DEFAULT_FONT_SIZE 16
 #define INIT_LINE_COUNT 5
 
+enum
+{
+  C_Black = 0,
+  C_Brick = 1,
+  C_Blue = 2,
+  C_Orange = 3,
+  C_Purple = 4,
+  C_Gray = 5,
+  C_Teal = 6,
+  C_Red = 7
+};
+
 #define COLOR_COMMENT (C_Gray)
 #define COLOR_TYPE (C_Brick)
 #define COLOR_PREPROC (C_Purple)
-#define COLOR_FLOWCTRL (C_Green)
+#define COLOR_FLOWCTRL (C_Teal)
 #define COLOR_STRCHAR (C_Teal)
 #define COLOR_MODIFYER (C_Blue)
 #define COLOR_COMMENT_NOTICE (C_Red)
 #define COLOR_DEFAULT (C_Black)
 #define COLOR_KEYWORD (C_Blue)
+#define COLOR_SEARCH_HIGHLIGHT (C_Orange)
 
 #define MAX(NUMA, NUMB) ((NUMA) > (NUMB) ? (NUMA) : (NUMB))
 #define MIN(NUMA, NUMB) ((NUMA) < (NUMB) ? (NUMA) : (NUMB))
@@ -56,21 +69,23 @@ void SortFilePathList(FilePathList files);
 Font g_font;
 float g_font_height, g_font_spacing;
 
-enum
-{
-  C_Black = 0,
-  C_Brick = 1,
-  C_Blue = 2,
-  C_Green = 3,
-  C_Purple = 4,
-  C_Gray = 5,
-  C_Teal = 6,
-  C_Red = 7
-};
+#define HIGH_NIBBLE(BYTE) (((BYTE) >> 4) & 0x0F)
+#define LOW_NIBBLE(BYTE) ((BYTE) & 0x0F)
+
+#define SET_HIGH_NIBBLE(BYTE, NIBBLE) ((BYTE) = ((BYTE) & 0x0F) | ((NIBBLE & 0x0F) << 4))
+#define SET_LOW_NIBBLE(BYTE, NIBBLE) ((BYTE) = ((BYTE) & 0xF0) | ((NIBBLE) & 0x0F))
 
 struct Line
 {
+  /*
+  The low 4 bytes are used for forground color,
+  The high 4 bytes are for the background color
+  */
+
+#define STYLE_FG_COLOR(STYLEBYTE) LOW_NIBBLE((STYLEBYTE))
+#define STYLE_BG_COLOR(STYLEBYTE) HIGH_NIBBLE((STYLEBYTE))
   uint8_t *style;
+
   char *base;
   size_t len, cap;
 
@@ -111,7 +126,11 @@ void DelSelectedText(),
 void CloseFile();  // closes the current file without asking the user to save
 bool IsFileOpen(); // returns true if the g_open_filepath is a string longer then 1
 
-void NextSearchResault(), PrevSearchResault(), StartSearchUI();
+void NextSearchResault(),
+    PrevSearchResault(),
+    StartSearchUI(),
+    ClearSearchResaults(),
+    SearchResaultFindAll();
 
 enum DUCP
 {
@@ -878,6 +897,9 @@ void UpdateEditor(float x, float y)
     g_cursor_col = g_lines[g_cursor_line].len;
 }
 
+size_t g_search_index, // current search find idx being displayed
+    g_search_finds;    // how many times we found the search term
+
 void DrawEditor(float x, float y)
 {
   for (size_t i = g_topline; i < (g_screen_line_count + g_topline); i++)
@@ -901,19 +923,35 @@ void DrawEditor(float x, float y)
 
     for (size_t c = 0; c < l.len; c++)
     {
-      Color color = BLACK;
+      Color fg = BLACK;
 
-      switch (l.style[c])
+      switch (STYLE_FG_COLOR(l.style[c]))
       {
         // clang-format off
-      case C_Black  : color = TEXT_NORMAL_COLOR; break;
-      case C_Blue   : color = TEXT_BLUE_COLOR;   break;
-      case C_Brick  : color = TEXT_BRICK_COLOR;  break;
-      case C_Green  : color = TEXT_GREEN_COLOR;  break;
-      case C_Purple : color = TEXT_PURPLE_COLOR; break;
-      case C_Gray   : color = TEXT_GRAY_COLOR;   break;
-      case C_Teal   : color = TEXT_TEAL_COLOR;   break;
-      case C_Red    : color = TEXT_RED_COLOR;    break;
+      case C_Black  : fg = TEXT_NORMAL_COLOR; break;
+      case C_Blue   : fg = TEXT_BLUE_COLOR;   break;
+      case C_Brick  : fg = TEXT_BRICK_COLOR;  break;
+      case C_Orange : fg = TEXT_ORANGE_COLOR;  break;
+      case C_Purple : fg = TEXT_PURPLE_COLOR; break;
+      case C_Gray   : fg = TEXT_GRAY_COLOR;   break;
+      case C_Teal   : fg = TEXT_TEAL_COLOR;   break;
+      case C_Red    : fg = TEXT_RED_COLOR;    break;
+        // clang-format on
+      }
+
+      Color bg = BLACK;
+
+      switch (STYLE_BG_COLOR(l.style[c]))
+      {
+        // clang-format off
+      case C_Black  : bg = (Color){.a = 0}; break;
+      case C_Blue   : bg = TEXT_BLUE_COLOR;   break;
+      case C_Brick  : bg = TEXT_BRICK_COLOR;  break;
+      case C_Orange : bg = TEXT_ORANGE_COLOR;  break;
+      case C_Purple : bg = TEXT_PURPLE_COLOR; break;
+      case C_Gray   : bg = TEXT_GRAY_COLOR;   break;
+      case C_Teal   : bg = TEXT_TEAL_COLOR;   break;
+      case C_Red    : bg = TEXT_RED_COLOR;    break;
         // clang-format on
       }
 
@@ -965,9 +1003,13 @@ void DrawEditor(float x, float y)
                         g_effective_font_width, g_font_height, SELECTED_TEXT_COLOR);
       }
 
+      DrawRectangle((g_effective_font_width * (LINE_NUMBERS_SUPPORTED + 2 + c)) + x,
+                    ((i - g_topline) * g_font_height) + y,
+                    g_effective_font_width, g_font_height, bg);
+
       FDrawText(TextFormat("%c", l.base[c]),
                 (g_effective_font_width * (LINE_NUMBERS_SUPPORTED + 2 + c)) + x,
-                ((i - g_topline) * g_font_height) + y, color);
+                ((i - g_topline) * g_font_height) + y, fg);
     }
   }
 
@@ -1351,7 +1393,18 @@ int main(int argc, char *argv[])
                                               pos.y + g_font_height + g_font_height + 2,
                                               fp_measure);
 
-      if (search_box_act == TBAccept || next_btn_pressed)
+      DrawTextEx(g_font,
+                 TextFormat("%d/%d", g_search_index, g_search_finds),
+                 (Vector2){pos.x + (pos.width * .5), pos.y + pos.height - g_font_height},
+                 g_font_height, g_font_spacing, BLACK);
+
+      if (search_box_act == TBAccept)
+      {
+        ClearSearchResaults();
+        SearchResaultFindAll();
+      }
+
+      if (next_btn_pressed)
       {
         NextSearchResault();
       }
@@ -1396,11 +1449,20 @@ EXIT:
   return 0;
 }
 
-size_t g_search_line, g_search_col;
+void ClearSearchResaults()
+{
+  for (size_t lineidx = 0; lineidx < g_lines_count; lineidx++)
+  {
+    struct Line l = g_lines[lineidx];
+    for (size_t i = 0; i < l.len; i++)
+    {
+      l.style[i] = SET_HIGH_NIBBLE(l.style[i], C_Black);
+    }
+  }
+}
 
 void StartSearchUI()
 {
-  g_search_line = g_search_col = 0;
   g_show_search_ui = true;
 
   if (g_is_select)
@@ -1414,20 +1476,25 @@ void StartSearchUI()
 
 void HighlightSearchFound(size_t line, size_t col_start, size_t len)
 {
-  memset(g_lines[line].style + col_start, C_Green, len);
+  struct Line l = g_lines[line];
+  for (size_t i = 0; i < len; i++)
+  {
+    l.style[col_start + i] = SET_HIGH_NIBBLE(l.style[col_start + i], COLOR_SEARCH_HIGHLIGHT);
+  }
 }
 
-void SearchResaultFind(int direction)
+void SearchResaultFindAll()
 {
-  puts("SearchResaultFind");
+  g_search_finds = 0;
 
   size_t search_len = strlen(g_serach_buffer);
+  size_t search_line = 0, search_col = 0;
 
   while (true)
   {
-    struct Line l = g_lines[g_search_line];
+    struct Line l = g_lines[search_line];
 
-    for (size_t c = g_search_col; c < l.len; c++)
+    for (size_t c = 0; c < l.len; c++)
     {
       char ch = l.base[c];
       size_t remain = l.len - c;
@@ -1435,34 +1502,40 @@ void SearchResaultFind(int direction)
       if (search_len > remain)
         goto LINE_TOO_SHORT;
 
-        // todo: perhaps a MEMCMP that matches case insensitively
+      // todo: perhaps a MEMCMP that matches case insensitively
       if (memcmp(l.base + c, g_serach_buffer, search_len) == 0)
       {
-        HighlightSearchFound(g_search_line, c, search_len);
+        HighlightSearchFound(search_line, c, search_len);
+        g_search_finds += 1;
       }
     }
 
   LINE_TOO_SHORT:;
-    g_search_line += direction;
+    search_line += 1;
 
-    if (0 > g_search_line)
-    {
-      goto NOT_FOUND;
-    }
-
-    if (g_search_line >= g_lines_count)
+    if (search_line >= g_lines_count)
     {
       goto NOT_FOUND;
     }
   }
 
 NOT_FOUND:;
-  g_search_line = g_search_col = 0;
 }
 
-void NextSearchResault() { SearchResaultFind(1); }
+void NextSearchResault()
+{
+  g_search_index += 1;
+  if (g_search_index >= g_search_finds)
+    g_search_index = g_search_finds;
+}
 
-void PrevSearchResault() { SearchResaultFind(-1); }
+void PrevSearchResault()
+{
+  if (0 == g_search_index)
+    return;
+    
+  g_search_index -= 1;
+}
 
 void BeginSelection()
 {
