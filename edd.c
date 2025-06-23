@@ -108,6 +108,10 @@ void DelSelectedText(),
     CopySelection(),  // ctrl+c while g_is_select
     CutSelection();   // ctrl+x while g_is_select
 
+
+void CloseFile(); // closes the current file without asking the user to save
+bool IsFileOpen(); // returns true if the g_open_filepath is a string longer then 1
+
 enum DUCP
 {
   DUCP_CancelClose, // User said never mind to closing the current doc
@@ -405,6 +409,9 @@ void FDrawText(const char *text, float x, float y, Color color)
 
 void OpenTextFile(const char *filepath)
 {
+  if (IsFileOpen())
+    CloseFile();
+
   g_cursor_line = 0;
   g_cursor_col = 0;
 
@@ -501,6 +508,21 @@ bool IsFileOpen()
     return false;
 
   return true;
+}
+
+// unload current file, do not ask about saving
+void CloseFile()
+{
+  g_cursor_col = 0;
+  g_cursor_line = 0;
+
+  for (size_t i = 0; i < g_lines_count; i++)
+  {
+    free(g_lines[i].base);
+    free(g_lines[i].style);
+  }
+  free(g_lines);
+  memset(g_open_file_path, 0, sizeof(g_open_file_path));
 }
 
 void SaveOpenFile()
@@ -673,6 +695,15 @@ void StartSearchUI()
 
 void OpenFile()
 {
+  enum DUCP res = DoUnsavedChangesPopup();
+  if (res == DUCP_CancelClose)
+    return;
+
+  if (IsFileOpen())
+  {
+    CloseFile();
+  }
+
   const char *newPath = OpenFileDialog(GetApplicationDirectory(), "*");
   printf("opening : %s\n", newPath);
   if (newPath)
@@ -1357,6 +1388,7 @@ int main(int argc, char *argv[])
 EXIT:
 
   FreeProjectExplorer(explorer);
+  CloseFile();
   CloseWindow();
 
   return 0;

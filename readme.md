@@ -20,6 +20,7 @@
 
 ## What my TODO stuff is
 - CTRL_F : Find and Replace, got some ui, not any logic
+- js, verilog, json, html  highlight
 
 
 ## bugs

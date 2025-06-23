@@ -1,0 +1,1 @@
+document.getElementById("heading").textContent = "Hello from JS";
