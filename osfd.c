@@ -265,7 +265,7 @@ TBAction osfd_TextBox(char *text, int textcap, int x, int y, int width, bool sel
         DrawRectangle(cpos.x + x, y, 1, g_font_height, OSFD_TEXTBOX_FG);
     }
 
-    if (selected_for_input && IsKeyPressed(KEY_ENTER))
+    if (selected_for_input && (IsKeyPressed(KEY_ENTER) || IsKeyPressedRepeat(KEY_ENTER)))
         return TBAccept;
     return (IsMouseButtonReleased(MOUSE_BUTTON_LEFT) && CheckCollisionPointRec(GetMousePosition(), (Rectangle){x, y, width, g_font_height})) ? TBSelect : TBNothing;
 }

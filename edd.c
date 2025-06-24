@@ -31,7 +31,16 @@ enum
   C_Purple = 4,
   C_Gray = 5,
   C_Teal = 6,
-  C_Red = 7
+  C_Red = 7,
+
+  C_Unused_0 = 8,
+  C_Unused_1 = 9,
+  C_Unused_2 = 10,
+  C_Unused_3 = 11,
+  C_Unused_4 = 12,
+  C_Unused_5 = 13,
+  C_Unused_6 = 14,
+  C_Unused_7 = 15,
 };
 
 #define COLOR_COMMENT (C_Gray)
@@ -703,19 +712,19 @@ void SaveAs()
 
 void OpenFile()
 {
-  enum DUCP res = DoUnsavedChangesPopup();
-  if (res == DUCP_CancelClose)
-    return;
-
-  if (IsFileOpen())
-  {
-    CloseFile();
-  }
-
   const char *newPath = OpenFileDialog(GetApplicationDirectory(), "*");
   printf("opening : %s\n", newPath);
   if (newPath)
   {
+    enum DUCP res = DoUnsavedChangesPopup();
+    if (res == DUCP_CancelClose)
+      return;
+
+    if (IsFileOpen())
+    {
+      CloseFile();
+    }
+
     OpenTextFile(newPath);
   }
 }
@@ -897,11 +906,60 @@ void UpdateEditor(float x, float y)
     g_cursor_col = g_lines[g_cursor_line].len;
 }
 
+void ScrollToLine(size_t lineno)
+{
+  printf("ScrollToLine %zu\n", lineno);
+  g_topline = lineno - 5 > 0 ? lineno - 5 : lineno;
+}
+
 size_t g_search_index, // current search find idx being displayed
     g_search_finds;    // how many times we found the search term
 
+void ScrollToSelectedSearchResault()
+{
+  printf("ScrollToSelectedSearchResault %zu\n", g_search_index);
+
+  int find_item_number = -1;
+  size_t find_item_char = 0;
+  size_t find_strlen = strlen(g_serach_buffer);
+
+  for (size_t lineidx = 0; lineidx < g_lines_count; lineidx++)
+  {
+    struct Line l = g_lines[lineidx];
+
+    for (size_t c = 0; c < l.len; c++)
+    {
+
+      unsigned char bg_nibble = STYLE_BG_COLOR(l.style[c]);
+
+      if (bg_nibble == COLOR_SEARCH_HIGHLIGHT)
+      {
+        if (find_item_char == find_strlen)
+        {
+          find_item_char = 0;
+          find_item_number += 1;
+        }
+        find_item_char += 1;
+      }
+
+      if (g_search_index == find_item_number)
+      {
+        ScrollToLine(lineidx);
+        g_cursor_line = lineidx;
+        g_cursor_col = c;
+        return;
+      }
+    }
+  }
+}
+
 void DrawEditor(float x, float y)
 {
+
+  size_t find_item_number = 0;
+  size_t find_item_char = 0;
+  size_t find_strlen = strlen(g_serach_buffer);
+
   for (size_t i = g_topline; i < (g_screen_line_count + g_topline); i++)
   {
 
@@ -924,14 +982,15 @@ void DrawEditor(float x, float y)
     for (size_t c = 0; c < l.len; c++)
     {
       Color fg = BLACK;
+      unsigned char fg_nibble = STYLE_FG_COLOR(l.style[c]);
 
-      switch (STYLE_FG_COLOR(l.style[c]))
+      switch (fg_nibble)
       {
         // clang-format off
       case C_Black  : fg = TEXT_NORMAL_COLOR; break;
       case C_Blue   : fg = TEXT_BLUE_COLOR;   break;
       case C_Brick  : fg = TEXT_BRICK_COLOR;  break;
-      case C_Orange : fg = TEXT_ORANGE_COLOR;  break;
+      case C_Orange : fg = TEXT_ORANGE_COLOR; break;
       case C_Purple : fg = TEXT_PURPLE_COLOR; break;
       case C_Gray   : fg = TEXT_GRAY_COLOR;   break;
       case C_Teal   : fg = TEXT_TEAL_COLOR;   break;
@@ -941,7 +1000,9 @@ void DrawEditor(float x, float y)
 
       Color bg = BLACK;
 
-      switch (STYLE_BG_COLOR(l.style[c]))
+      unsigned char bg_nibble = STYLE_BG_COLOR(l.style[c]);
+
+      switch (bg_nibble)
       {
         // clang-format off
       case C_Black  : bg = (Color){.a = 0}; break;
@@ -953,6 +1014,28 @@ void DrawEditor(float x, float y)
       case C_Teal   : bg = TEXT_TEAL_COLOR;   break;
       case C_Red    : bg = TEXT_RED_COLOR;    break;
         // clang-format on
+      }
+
+      if (g_show_search_ui)
+      {
+        if (bg_nibble == COLOR_SEARCH_HIGHLIGHT)
+        {
+          if (find_item_char == find_strlen)
+          {
+            find_item_char = 0;
+            find_item_number += 1;
+          }
+          find_item_char += 1;
+        }
+
+        if (g_search_index == find_item_number && bg_nibble == COLOR_SEARCH_HIGHLIGHT)
+        {
+          bg = rgb(255, 102, 255);
+        }
+      }
+      else
+      {
+        bg = (Color){.a = 0}; // no text bg color when not find UI is not open
       }
 
       if (g_is_select)
@@ -1255,6 +1338,19 @@ enum DUCP DoUnsavedChangesPopup()
   return res;
 }
 
+size_t g_last_search_hash;
+
+size_t ComputeSearchHash()
+{
+  size_t searchlen = sizeof(g_serach_buffer);
+  size_t accum = 0;
+  for (size_t i = 0; i < searchlen; i++)
+  {
+    accum += g_serach_buffer[i] * 33;
+  }
+  return accum;
+}
+
 int main(int argc, char *argv[])
 {
   SetConfigFlags(FLAG_WINDOW_RESIZABLE | FLAG_MSAA_4X_HINT | FLAG_VSYNC_HINT);
@@ -1394,14 +1490,26 @@ int main(int argc, char *argv[])
                                               fp_measure);
 
       DrawTextEx(g_font,
-                 TextFormat("%d/%d", g_search_index, g_search_finds),
+                 TextFormat("%d/%d",
+                            g_search_finds != 0 ? g_search_index + 1 : 0,
+                            g_search_finds),
                  (Vector2){pos.x + (pos.width * .5), pos.y + pos.height - g_font_height},
                  g_font_height, g_font_spacing, BLACK);
 
       if (search_box_act == TBAccept)
       {
-        ClearSearchResaults();
-        SearchResaultFindAll();
+        bool search_box_text_changed = g_last_search_hash != ComputeSearchHash();
+
+        if (search_box_text_changed)
+        {
+          ClearSearchResaults();
+          SearchResaultFindAll();
+          g_last_search_hash = ComputeSearchHash();
+        }
+        else
+        {
+          NextSearchResault();
+        }
       }
 
       if (next_btn_pressed)
@@ -1451,6 +1559,9 @@ EXIT:
 
 void ClearSearchResaults()
 {
+  g_search_index = 0;
+  g_search_finds = 0;
+
   for (size_t lineidx = 0; lineidx < g_lines_count; lineidx++)
   {
     struct Line l = g_lines[lineidx];
@@ -1524,17 +1635,22 @@ NOT_FOUND:;
 
 void NextSearchResault()
 {
+
   g_search_index += 1;
-  if (g_search_index >= g_search_finds)
-    g_search_index = g_search_finds;
+  if (g_search_index >= g_search_finds - 1)
+    g_search_index = g_search_finds - 1;
+
+  ScrollToSelectedSearchResault();
 }
 
 void PrevSearchResault()
 {
+
   if (0 == g_search_index)
     return;
-    
   g_search_index -= 1;
+
+  ScrollToSelectedSearchResault();
 }
 
 void BeginSelection()

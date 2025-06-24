@@ -26,6 +26,8 @@
 
 
 ## bugs
+
+### Syntax HL
 ``` c
 enum
 {
@@ -34,3 +36,6 @@ enum
 };
 ```
 the keyword `enum` dose not highlight correctly
+
+### Find Buggyness
+- Scrolling into view is kinda odd
